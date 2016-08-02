@@ -1,13 +1,11 @@
-# Kubernetes Template Project
+# Kubernetes Horizontal Self Scaler Project
 
-The Kubernetes Template Project is a template for starting new projects on the github.com/kubernetes organization. All Kubernetes projects, at mimimum, must have the following files:
+The Kubernetes Horizontal Self Scaler Project defines functionality
+that provides replication controllers, replica sets and deployments
+with the ability to scale themselves horizontally using a generic sidecar container.
 
-- a `README.md` outlining the project goals, sponsoring sig, and community contact information
-- an `OWNERS` file with the project leads listed
-- a `CONTRIBUTING.md` outlining how to contribute to the project
-- a `code-of-conduct.md` outlining community behavior and the consequences of breaking the code
-- a `LICENSE` which must be Apache 2.0
-- a `RELEASE.md` file that talks about the process for releases
+The first version provides a sync loop that will change the number of replicas
+based on the number of schedulable nodes and cores in the cluster.
 
 ## Community, discussion, contribution, and support
 
