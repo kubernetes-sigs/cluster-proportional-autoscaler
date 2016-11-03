@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	glog.V(0).Infof("Scaling Namespace: %s, Target: %s\n", config.Namespace, config.Target)
+	glog.V(0).Infof("Scaling Namespace: %s, Target: %s, Mode: %v\n", config.Namespace, config.Target, config.Mode)
 	scaler, err := autoscaler.NewAutoScaler(config)
 	if err != nil {
 		glog.Errorf("%v\n", err)

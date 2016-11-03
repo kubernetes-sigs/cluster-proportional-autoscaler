@@ -64,23 +64,21 @@ type ladderParams struct {
 }
 
 func (c *LadderController) SyncConfig(configMap k8sclient.ConfigMap) error {
-	// Only parse and rebuild the entries when the configmap changed
-	if configMap.Version != c.version {
-		glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries\n", c.version, configMap.Version)
-		params, err := parseParams([]byte(configMap.Data[ControllerType]))
-		if err != nil {
-			return fmt.Errorf("error parsing ladder params: %s", err)
-		}
-		sort.Sort(params.CoresToReplicas)
-		sort.Sort(params.NodesToReplicas)
-		c.params = params
-		c.version = configMap.Version
+	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries\n", c.version, configMap.Version)
+	params, err := parseParams([]byte(configMap.Data[ControllerType]))
+	if err != nil {
+		return fmt.Errorf("error parsing ladder params: %s", err)
 	}
+	glog.V(4).Infof("Parsed new params: %v\n", params)
+	sort.Sort(params.CoresToReplicas)
+	sort.Sort(params.NodesToReplicas)
+	c.params = params
+	c.version = configMap.Version
 	return nil
 }
 
 // parseParams Parse the params from JSON string
-func parseParams(data []byte) (params *ladderParams, err error) {
+func parseParams(data []byte) (*ladderParams, error) {
 	var p ladderParams
 	if err := json.Unmarshal(data, &p); err != nil {
 		return nil, fmt.Errorf("could not parse parameters (%s)", err)
@@ -102,6 +100,10 @@ func parseParams(data []byte) (params *ladderParams, err error) {
 		}
 	}
 	return &p, nil
+}
+
+func (c *LadderController) GetParamsVersion() string {
+	return c.version
 }
 
 func (c *LadderController) GetExpectedReplicas(status k8sclient.ClusterStatus) (int32, error) {

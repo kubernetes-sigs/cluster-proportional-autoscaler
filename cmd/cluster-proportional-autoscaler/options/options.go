@@ -39,7 +39,7 @@ type AutoScalerConfig struct {
 func NewAutoScalerConfig() *AutoScalerConfig {
 	return &AutoScalerConfig{
 		Namespace:         os.Getenv("MY_POD_NAMESPACE"),
-		Mode:              "ladder",
+		Mode:              "linear",
 		PollPeriodSeconds: 10,
 		PrintVer:          false,
 	}
@@ -90,7 +90,7 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
 	fs.StringVar(&c.ConfigMap, "configmap", c.ConfigMap, "ConfigMap containing our scaling parameters.")
 	fs.StringVar(&c.Namespace, "namespace", c.Namespace, "Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.")
-	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode. Default is the ladder mode, which is the only one currently.")
+	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode(linear/ladder). Default is the linear mode.")
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")
 	fs.BoolVar(&c.PrintVer, "version", c.PrintVer, "Print the version and exit.")
 }
