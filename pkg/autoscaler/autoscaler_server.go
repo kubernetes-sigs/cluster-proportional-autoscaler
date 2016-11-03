@@ -25,6 +25,7 @@ import (
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
+	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 
 	"github.com/golang/glog"
@@ -46,6 +47,8 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	switch c.Mode {
 	case laddercontroller.ControllerType:
 		controller = laddercontroller.NewLadderController()
+	case linearcontroller.ControllerType:
+		controller = linearcontroller.NewLinearController()
 	default:
 		return nil, fmt.Errorf("not a supported control mode: %v", c.Mode)
 	}
@@ -95,19 +98,22 @@ func (s *AutoScaler) pollAPIServer() {
 	glog.V(4).Infof("Total cores %5d, schedulable cores: %5d\n", clusterStatus.TotalCores, clusterStatus.SchedulableCores)
 
 	// Fetch autoscaler ConfigMap data from apiserver
-	configMap, err := (s.k8sClient.FetchConfigMap(s.k8sClient.GetNamespace(), s.configMapKey))
+	configMap, err := s.k8sClient.FetchConfigMap(s.k8sClient.GetNamespace(), s.configMapKey)
 	if err != nil {
 		glog.Errorf("error fetching scaler params: %s", err)
 		return
 	}
 
-	// Update the config
-	if err := s.controller.SyncConfig(configMap); err != nil {
-		glog.Errorf("error syncing configMap: %v\n", err)
-		return
+	// Only sync updated ConfigMap
+	if configMap.Version != s.controller.GetParamsVersion() {
+		// Update the config
+		if err := s.controller.SyncConfig(configMap); err != nil {
+			glog.Errorf("error syncing configMap: %v\n", err)
+			return
+		}
 	}
 
-	// Query the autoscaler for the expected replicas number
+	// Query the controller for the expected replicas number
 	expReplicas, err := s.controller.GetExpectedReplicas(clusterStatus)
 	if err != nil {
 		glog.Errorf("error calculating expected replicas number: %v\n", err)
