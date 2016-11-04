@@ -10,6 +10,7 @@ Usage of cluster-proportional-autoscaler:
 ```
       --alsologtostderr[=false]: log to standard error as well as files
       --configmap="": ConfigMap containing our scaling parameters.
+      --default-params="": Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if not present.
       --log-backtrace-at=:0: when logging hits line file:N, emit a stack trace
       --log-dir="": If non-empty, write log files in this directory
       --logtostderr[=false]: log to standard error instead of files
@@ -53,7 +54,7 @@ Parameters in ConfigMap must be JSON and use `linear` as key. The sub-keys as be
 ```
 data:
   linear: |-
-    { 
+    {
       "coresPerReplica": 2,
       "nodesPerReplica": 1,
       "min": 1,
@@ -82,7 +83,7 @@ Parameters in ConfigMap must be JSON and use `ladder` as key. The sub-keys as be
 ```
 data:
   ladder: |-
-    { 
+    {
       "coresToReplicas":
       [
         [ 1, 1 ],
@@ -113,14 +114,16 @@ Either one of the `coresToReplicas` or `nodesToReplicas` could be omitted.
 
 The lowest number of replicas is set to 1.
 
-## Example deployment file
+## Example deployment files
 
-This [autoscaler-linear-example.yaml](autoscaler-linear-example.yaml) and [autoscaler-ladder-example.yaml](autoscaler-ladder-example.yaml) are two example yaml files where an autoscaler pod watch and resizes the Deployment replicas of the nginx server.
-They are using different control modes. Use below command to create / delete one of the example:
+There are several example yaml files in the example folder, each of them will deploy an autoscaler pod watch and resizes the Deployment replicas of the nginx server.
+They are using different control modes. The autoscaler accepts default parameters passed by `--default-params` flag. Default ConfigMap will be created/re-created if default params present. Also see the example yaml files for example.
+
+Use below command to create / delete one of the example:
 ```
-kubectl create -f autoscaler-linear-example.yaml
+kubectl create -f linear.yaml
 ...
-kubectl delete -f autoscaler-linear-example.yaml
+kubectl delete -f linear.yaml
 ```
 
 # Comparisons to the Horizontal Pod Autoscaler feature
