@@ -31,7 +31,9 @@ import (
 
 // Interface - Wraps all needed client functionalities for autoscaler
 type Interface interface {
-	FetchConfigMap(namespace, configmap string) (ConfigMap, error)
+	FetchConfigMap(namespace, configmap string) (*ConfigMap, error)
+	CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error)
+	UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error)
 	GetClusterStatus() (clusterStatus ClusterStatus, err error)
 	GetNamespace() (namespace string)
 	// UpdateReplicas Update the number of replicas for the resource and return the previous replicas count
@@ -40,8 +42,9 @@ type Interface interface {
 
 // k8sClient - Wraps all Kubernetes API client functionalities
 type k8sClient struct {
-	target    *scaleTarget
-	clientset *kubernetes.Clientset
+	target        *scaleTarget
+	clientset     *kubernetes.Clientset
+	clusterStatus ClusterStatus
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
@@ -94,12 +97,40 @@ type ConfigMap struct {
 }
 
 // FetchConfigMap - fetch the requested key from the configmap
-func (k *k8sClient) FetchConfigMap(namespace, configmap string) (configMap ConfigMap, err error) {
-	cm, err := k.clientset.CoreClient.ConfigMaps(k.target.namespace).Get(configmap)
+func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*ConfigMap, error) {
+	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Get(configmap)
 	if err != nil {
-		return ConfigMap{}, err
+		return nil, err
 	}
-	return ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+}
+
+// CreateConfigMap - Create a configmap with given namespace, name and params
+func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+	providedConfigMap := apiv1.ConfigMap{}
+	providedConfigMap.ObjectMeta.Name = configmap
+	providedConfigMap.ObjectMeta.Namespace = namespace
+	providedConfigMap.Data = params
+	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Create(&providedConfigMap)
+	if err != nil {
+		return nil, err
+	}
+	glog.V(0).Infof("Created ConfigMap %v in namespace %v\n", configmap, namespace)
+	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+}
+
+// UpdateConfigMap - Update a configmap with given namespace, name and params
+func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+	providedConfigMap := apiv1.ConfigMap{}
+	providedConfigMap.ObjectMeta.Name = configmap
+	providedConfigMap.ObjectMeta.Namespace = namespace
+	providedConfigMap.Data = params
+	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Update(&providedConfigMap)
+	if err != nil {
+		return nil, err
+	}
+	glog.V(0).Infof("Updated ConfigMap %v in namespace %v\n", configmap, namespace)
+	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
 }
 
 type ClusterStatus struct {
@@ -135,6 +166,7 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus ClusterStatus, err error) 
 	}
 	clusterStatus.TotalCores = int32(tcInt64)
 	clusterStatus.SchedulableCores = int32(scInt64)
+	k.clusterStatus = clusterStatus
 	return clusterStatus, nil
 }
 
@@ -145,6 +177,7 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	}
 	prevRelicas = scale.Spec.Replicas
 	if expReplicas != prevRelicas {
+		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]\n", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
 		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d\n", prevRelicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
 		_, err = k.clientset.Extensions().Scales(k.target.namespace).Update(k.target.kind, scale)

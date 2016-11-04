@@ -18,6 +18,7 @@ limitations under the License.
 package options
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -32,6 +33,7 @@ type AutoScalerConfig struct {
 	ConfigMap         string
 	Namespace         string
 	Mode              string
+	DefaultParams     map[string]string
 	PollPeriodSeconds int
 	PrintVer          bool
 }
@@ -63,12 +65,41 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 		errorsFound = true
 		glog.Errorf("--poll-period-seconds cannot be less than 1\n")
 	}
+	params, err := pflag.CommandLine.GetString("default-params")
+	if err != nil {
+		errorsFound = true
+		glog.Errorf("Error getting --default-params: %v\n", err)
+	} else {
+		if params != "" {
+			c.DefaultParams, err = parseParamsFromString(params)
+			if err != nil {
+				errorsFound = true
+				glog.Errorf("Error parsing given configMap params: %v\n", err)
+			}
+		}
+	}
 
 	// Log all sanity check errors before returning a single error string
 	if errorsFound {
 		return fmt.Errorf("failed to validate all input parameters")
 	}
 	return nil
+}
+
+func parseParamsFromString(params string) (map[string]string, error) {
+	var rawData map[string]interface{}
+	if err := json.Unmarshal([]byte(params), &rawData); err != nil {
+		return nil, err
+	}
+	configData := make(map[string]string)
+	for key, param := range rawData {
+		marshaled, err := json.Marshal(param)
+		if err != nil {
+			return nil, err
+		}
+		configData[key] = string(marshaled)
+	}
+	return configData, nil
 }
 
 func isTargetFormatValid(target string) bool {
@@ -79,7 +110,7 @@ func isTargetFormatValid(target string) bool {
 	if !strings.HasPrefix(target, "deployment/") &&
 		!strings.HasPrefix(target, "replicationcontroller/") &&
 		!strings.HasPrefix(target, "replicaset/") {
-		glog.Errorf("target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).\n")
+		glog.Errorf("Target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).\n")
 		return false
 	}
 	return true
@@ -90,7 +121,8 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
 	fs.StringVar(&c.ConfigMap, "configmap", c.ConfigMap, "ConfigMap containing our scaling parameters.")
 	fs.StringVar(&c.Namespace, "namespace", c.Namespace, "Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.")
-	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode(linear/ladder). Default is the linear mode.")
+	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode(linear/ladder).")
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")
 	fs.BoolVar(&c.PrintVer, "version", c.PrintVer, "Print the version and exit.")
+	fs.String("default-params", "", "Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if not present.")
 }

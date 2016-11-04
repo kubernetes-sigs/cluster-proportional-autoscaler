@@ -63,13 +63,13 @@ type ladderParams struct {
 	NodesToReplicas paramEntries `json:"nodesToReplicas"`
 }
 
-func (c *LadderController) SyncConfig(configMap k8sclient.ConfigMap) error {
+func (c *LadderController) SyncConfig(configMap *k8sclient.ConfigMap) error {
 	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries\n", c.version, configMap.Version)
+	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
 	if err != nil {
 		return fmt.Errorf("error parsing ladder params: %s", err)
 	}
-	glog.V(4).Infof("Parsed new params: %v\n", params)
 	sort.Sort(params.CoresToReplicas)
 	sort.Sort(params.NodesToReplicas)
 	c.params = params

@@ -49,13 +49,13 @@ type linearParams struct {
 	Max             int `json:"max"`
 }
 
-func (c *LinearController) SyncConfig(configMap k8sclient.ConfigMap) error {
+func (c *LinearController) SyncConfig(configMap *k8sclient.ConfigMap) error {
 	glog.V(0).Infof("ConfigMap version change (old: %s new: %s) - rebuilding params\n", c.version, configMap.Version)
+	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
 	if err != nil {
 		return fmt.Errorf("error parsing linear params: %s", err)
 	}
-	glog.V(4).Infof("Parsed new params: %v\n", params)
 	c.params = params
 	c.version = configMap.Version
 	return nil

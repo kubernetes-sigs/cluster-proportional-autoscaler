@@ -25,24 +25,24 @@ import (
 
 func verifyParams(t *testing.T, scalerParams, expScalerParams *ladderParams) {
 	if len(expScalerParams.CoresToReplicas) != len(scalerParams.CoresToReplicas) {
-		t.Errorf("scaler Params length mismatch Expected: %d, Got %d", len(expScalerParams.CoresToReplicas), len(scalerParams.CoresToReplicas))
+		t.Errorf("Scaler Params length mismatch Expected: %d, Got %d", len(expScalerParams.CoresToReplicas), len(scalerParams.CoresToReplicas))
 		return
 	}
 	for n, expected := range expScalerParams.CoresToReplicas {
 		parsed := scalerParams.CoresToReplicas[n]
 		if expected[0] != parsed[0] || expected[1] != parsed[1] {
-			t.Errorf("scaler parser error - Expected value %v MISMATCHED: Got %v", expected, parsed)
+			t.Errorf("Scaler parser error - Expected value %v MISMATCHED: Got %v", expected, parsed)
 		}
 	}
 
 	if len(expScalerParams.NodesToReplicas) != len(scalerParams.NodesToReplicas) {
-		t.Errorf("scaler Params length mismatch Expected: %d, Got %d", len(expScalerParams.NodesToReplicas), len(scalerParams.NodesToReplicas))
+		t.Errorf("Scaler Params length mismatch Expected: %d, Got %d", len(expScalerParams.NodesToReplicas), len(scalerParams.NodesToReplicas))
 		return
 	}
 	for n, expected := range expScalerParams.NodesToReplicas {
 		parsed := scalerParams.NodesToReplicas[n]
 		if expected[0] != parsed[0] || expected[1] != parsed[1] {
-			t.Errorf("scaler parser error - Expected value %v MISMATCHED: Got %v", expected, parsed)
+			t.Errorf("Scaler parser error - Expected value %v MISMATCHED: Got %v", expected, parsed)
 		}
 	}
 }
@@ -126,14 +126,14 @@ func TestControllerParser(t *testing.T) {
 		params, err := parseParams([]byte(tc.jsonData))
 		if tc.expError {
 			if err == nil {
-				t.Errorf("unexpected parsing success. Expected failure")
+				t.Errorf("Unexpected parsing success. Expected failure")
 				spew.Dump(tc)
 				spew.Dump(params)
 			}
 			continue
 		}
 		if err != nil && !tc.expError {
-			t.Errorf("unexpected parse failure")
+			t.Errorf("Unexpected parse failure: %v", err)
 			spew.Dump(tc)
 			continue
 		}
@@ -267,7 +267,7 @@ func TestControllerScaler(t *testing.T) {
 
 	for _, tc := range testCases {
 		if replicas := getExpectedReplicasFromEntries(tc.numResources, tc.entries); tc.expReplicas != replicas {
-			t.Errorf("scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
 		}
 	}
 }

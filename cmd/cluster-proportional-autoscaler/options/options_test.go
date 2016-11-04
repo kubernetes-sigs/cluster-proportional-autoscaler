@@ -60,7 +60,7 @@ func TestIsTargetFormatValid(t *testing.T) {
 		tc.target = strings.ToLower(tc.target)
 		res := isTargetFormatValid(tc.target)
 		if res != tc.expResult {
-			t.Errorf("target format verification for [%v] failed. Expected %v, Got %v", tc.target, tc.expResult, res)
+			t.Errorf("Target format verification for [%v] failed. Expected %v, Got %v", tc.target, tc.expResult, res)
 		}
 	}
 }

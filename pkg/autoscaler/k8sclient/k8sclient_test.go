@@ -56,14 +56,14 @@ func TestGetScaleTarget(t *testing.T) {
 	for _, tc := range testCases {
 		res, err := getScaleTarget(tc.target, "default")
 		if err != nil && !tc.expError {
-			t.Errorf("expect no error, got error for target: %v", tc.target)
+			t.Errorf("Expect no error, got error for target: %v", tc.target)
 			continue
 		} else if err == nil && tc.expError {
-			t.Errorf("expect error, got no error for target: %v", tc.target)
+			t.Errorf("Expect error, got no error for target: %v", tc.target)
 			continue
 		}
 		if res.kind != tc.expKind || res.name != tc.expName {
-			t.Errorf("expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expKind, tc.expName, res.kind, res.name)
+			t.Errorf("Expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expKind, tc.expName, res.kind, res.name)
 		}
 	}
 }

@@ -22,6 +22,6 @@ import (
 
 type Interface interface {
 	GetExpectedReplicas(k8sclient.ClusterStatus) (int32, error)
-	SyncConfig(k8sclient.ConfigMap) error
+	SyncConfig(*k8sclient.ConfigMap) error
 	GetParamsVersion() string
 }
