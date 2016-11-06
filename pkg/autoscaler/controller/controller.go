@@ -20,8 +20,11 @@ import (
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
 
-type Interface interface {
+type Controller interface {
+	// GetExpectedReplicas returns the expected replicas based on cluster status
 	GetExpectedReplicas(k8sclient.ClusterStatus) (int32, error)
-	SyncConfig(k8sclient.ConfigMap) error
+	// SyncConfig synces the ConfigMap with controller
+	SyncConfig(*k8sclient.ConfigMap) error
+	// GetParamsVersion returns the latest parameters version from controller
 	GetParamsVersion() string
 }

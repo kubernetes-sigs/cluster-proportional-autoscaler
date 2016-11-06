@@ -29,23 +29,31 @@ import (
 	"github.com/golang/glog"
 )
 
-// Interface - Wraps all needed client functionalities for autoscaler
-type Interface interface {
-	FetchConfigMap(namespace, configmap string) (ConfigMap, error)
+// K8sClient - Wraps all needed client functionalities for autoscaler
+type K8sClient interface {
+	// FetchConfigMap fetches the requested configmap from the Apiserver
+	FetchConfigMap(namespace, configmap string) (*ConfigMap, error)
+	// CreateConfigMap creates a configmap with given namespace, name and params
+	CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error)
+	// UpdateConfigMap updates a configmap with given namespace, name and params
+	UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error)
+	// GetClusterStatus counts schedulable nodes and cores in the cluster
 	GetClusterStatus() (clusterStatus ClusterStatus, err error)
+	// GetNamespace returns the namespace of target resource.
 	GetNamespace() (namespace string)
-	// UpdateReplicas Update the number of replicas for the resource and return the previous replicas count
+	// UpdateReplicas updates the number of replicas for the resource and return the previous replicas count
 	UpdateReplicas(expReplicas int32) (prevReplicas int32, err error)
 }
 
 // k8sClient - Wraps all Kubernetes API client functionalities
 type k8sClient struct {
-	target    *scaleTarget
-	clientset *kubernetes.Clientset
+	target        *scaleTarget
+	clientset     *kubernetes.Clientset
+	clusterStatus ClusterStatus
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
-func NewK8sClient(namespace, target string) (Interface, error) {
+func NewK8sClient(namespace, target string) (K8sClient, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -83,7 +91,6 @@ type scaleTarget struct {
 	namespace string
 }
 
-// GetNamespace returns the namespace of target resource.
 func (k *k8sClient) GetNamespace() (namespace string) {
 	return k.target.namespace
 }
@@ -93,13 +100,38 @@ type ConfigMap struct {
 	Version string
 }
 
-// FetchConfigMap - fetch the requested key from the configmap
-func (k *k8sClient) FetchConfigMap(namespace, configmap string) (configMap ConfigMap, err error) {
-	cm, err := k.clientset.CoreClient.ConfigMaps(k.target.namespace).Get(configmap)
+func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*ConfigMap, error) {
+	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Get(configmap)
 	if err != nil {
-		return ConfigMap{}, err
+		return nil, err
 	}
-	return ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+}
+
+func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+	providedConfigMap := apiv1.ConfigMap{}
+	providedConfigMap.ObjectMeta.Name = configmap
+	providedConfigMap.ObjectMeta.Namespace = namespace
+	providedConfigMap.Data = params
+	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Create(&providedConfigMap)
+	if err != nil {
+		return nil, err
+	}
+	glog.V(0).Infof("Created ConfigMap %v in namespace %v\n", configmap, namespace)
+	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+}
+
+func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+	providedConfigMap := apiv1.ConfigMap{}
+	providedConfigMap.ObjectMeta.Name = configmap
+	providedConfigMap.ObjectMeta.Namespace = namespace
+	providedConfigMap.Data = params
+	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Update(&providedConfigMap)
+	if err != nil {
+		return nil, err
+	}
+	glog.V(0).Infof("Updated ConfigMap %v in namespace %v\n", configmap, namespace)
+	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
 }
 
 type ClusterStatus struct {
@@ -109,7 +141,6 @@ type ClusterStatus struct {
 	SchedulableCores int32
 }
 
-// GetClusterStatus Count schedulable nodes and cores in our cluster
 func (k *k8sClient) GetClusterStatus() (clusterStatus ClusterStatus, err error) {
 	opt := api.ListOptions{Watch: false}
 
@@ -135,6 +166,7 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus ClusterStatus, err error) 
 	}
 	clusterStatus.TotalCores = int32(tcInt64)
 	clusterStatus.SchedulableCores = int32(scInt64)
+	k.clusterStatus = clusterStatus
 	return clusterStatus, nil
 }
 
@@ -145,6 +177,7 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	}
 	prevRelicas = scale.Spec.Replicas
 	if expReplicas != prevRelicas {
+		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]\n", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
 		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d\n", prevRelicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
 		_, err = k.clientset.Extensions().Scales(k.target.namespace).Update(k.target.kind, scale)
