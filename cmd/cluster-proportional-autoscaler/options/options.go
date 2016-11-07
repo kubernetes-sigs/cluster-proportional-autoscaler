@@ -18,6 +18,7 @@ limitations under the License.
 package options
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -32,6 +33,7 @@ type AutoScalerConfig struct {
 	ConfigMap         string
 	Namespace         string
 	Mode              string
+	DefaultParams     configMapData
 	PollPeriodSeconds int
 	PrintVer          bool
 }
@@ -79,10 +81,36 @@ func isTargetFormatValid(target string) bool {
 	if !strings.HasPrefix(target, "deployment/") &&
 		!strings.HasPrefix(target, "replicationcontroller/") &&
 		!strings.HasPrefix(target, "replicaset/") {
-		glog.Errorf("target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).\n")
+		glog.Errorf("Target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).\n")
 		return false
 	}
 	return true
+}
+
+type configMapData map[string]string
+
+func (c *configMapData) Set(raw string) error {
+	var rawData map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &rawData); err != nil {
+		return err
+	}
+	*c = make(map[string]string)
+	for key, param := range rawData {
+		marshaled, err := json.Marshal(param)
+		if err != nil {
+			return err
+		}
+		(*c)[key] = string(marshaled)
+	}
+	return nil
+}
+
+func (c *configMapData) String() string {
+	return fmt.Sprintf("%v", *c)
+}
+
+func (c *configMapData) Type() string {
+	return "configMapData"
 }
 
 // AddFlags adds flags for a specific ProxyServer to the specified FlagSet
@@ -90,7 +118,8 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
 	fs.StringVar(&c.ConfigMap, "configmap", c.ConfigMap, "ConfigMap containing our scaling parameters.")
 	fs.StringVar(&c.Namespace, "namespace", c.Namespace, "Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.")
-	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode(linear/ladder). Default is the linear mode.")
+	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode(linear/ladder).")
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")
 	fs.BoolVar(&c.PrintVer, "version", c.PrintVer, "Print the version and exit.")
+	fs.Var(&c.DefaultParams, "default-params", "Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if ConfigMap is not present.")
 }

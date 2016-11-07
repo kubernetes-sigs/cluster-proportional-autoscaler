@@ -67,15 +67,15 @@ func TestRun(t *testing.T) {
 
 	fakeClock := clock.NewFakeClock(time.Now())
 	fakePollPeriod := 5 * time.Second
-	fakeConfigMapKey := "fake-cluster-proportional-autoscaler-params"
+	fakeConfigMapName := "fake-cluster-proportional-autoscaler-params"
 	autoScaler := &AutoScaler{
-		k8sClient:    &mockK8s,
-		controller:   laddercontroller.NewLadderController(),
-		clock:        fakeClock,
-		pollPeriod:   fakePollPeriod,
-		configMapKey: fakeConfigMapKey,
-		stopCh:       make(chan struct{}),
-		readyCh:      make(chan<- struct{}, 1),
+		k8sClient:     &mockK8s,
+		controller:    laddercontroller.NewLadderController(),
+		clock:         fakeClock,
+		pollPeriod:    fakePollPeriod,
+		configMapName: fakeConfigMapName,
+		stopCh:        make(chan struct{}),
+		readyCh:       make(chan<- struct{}, 1),
 	}
 
 	go autoScaler.Run()
@@ -84,7 +84,7 @@ func TestRun(t *testing.T) {
 	t.Logf("Scenario: cluster size changing\n")
 	t.Logf("Wait for the number of replicas be scaled to 1 even no node and no core)\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 1); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 
 	mockK8s.NumOfCores = 800
@@ -92,7 +92,7 @@ func TestRun(t *testing.T) {
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 5 when there are 800 cores and 1 node\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 5); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 
 	mockK8s.NumOfCores = 1
@@ -100,7 +100,7 @@ func TestRun(t *testing.T) {
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 2 when there are 1 cores and 3 node\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 2); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 
 	mockK8s.NumOfCores = 200000
@@ -108,7 +108,7 @@ func TestRun(t *testing.T) {
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 100 when there are 200000 cores and 50000 node\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 100); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 
 	t.Logf("Scenario: ConfigMap is changed\n")
@@ -143,7 +143,7 @@ func TestRun(t *testing.T) {
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 200 with new configuration)\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 200); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 
 	mockK8s.NumOfCores = 500
@@ -151,7 +151,7 @@ func TestRun(t *testing.T) {
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 4 when there are 500 cores and 100 node\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 4); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 
 	t.Logf("Scenario: ConfigMap is missing and later appears again\n")
@@ -164,14 +164,14 @@ func TestRun(t *testing.T) {
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 7 when there are 2000 cores and 400 node\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 7); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
 }
 
 func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient, replicas int) error {
 	return wait.Poll(5*time.Millisecond, 5*time.Second, func() (done bool, err error) {
 		if mockK8s.NumOfReplicas != replicas {
-			t.Logf("error number of replicas, expected: %d, got %d\n", replicas, mockK8s.NumOfReplicas)
+			t.Logf("Error number of replicas, expected: %d, got %d\n", replicas, mockK8s.NumOfReplicas)
 			return false, nil
 		}
 		return true, nil

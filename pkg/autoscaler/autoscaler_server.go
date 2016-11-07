@@ -33,17 +33,18 @@ import (
 
 // AutoScaler determines the number of replicas to run
 type AutoScaler struct {
-	k8sClient    k8sclient.Interface
-	controller   controller.Interface
-	configMapKey string
-	pollPeriod   time.Duration
-	clock        clock.Clock
-	stopCh       chan struct{}
-	readyCh      chan<- struct{} // For testing.
+	k8sClient     k8sclient.K8sClient
+	controller    controller.Controller
+	configMapName string
+	defaultParams map[string]string
+	pollPeriod    time.Duration
+	clock         clock.Clock
+	stopCh        chan struct{}
+	readyCh       chan<- struct{} // For testing.
 }
 
 func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
-	var controller controller.Interface
+	var controller controller.Controller
 	switch c.Mode {
 	case laddercontroller.ControllerType:
 		controller = laddercontroller.NewLadderController()
@@ -57,13 +58,14 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 		return nil, err
 	}
 	return &AutoScaler{
-		k8sClient:    newK8sClient,
-		controller:   controller,
-		configMapKey: c.ConfigMap,
-		pollPeriod:   time.Second * time.Duration(c.PollPeriodSeconds),
-		clock:        clock.RealClock{},
-		stopCh:       make(chan struct{}),
-		readyCh:      make(chan struct{}, 1),
+		k8sClient:     newK8sClient,
+		controller:    controller,
+		configMapName: c.ConfigMap,
+		defaultParams: c.DefaultParams,
+		pollPeriod:    time.Second * time.Duration(c.PollPeriodSeconds),
+		clock:         clock.RealClock{},
+		stopCh:        make(chan struct{}),
+		readyCh:       make(chan struct{}, 1),
 	}, nil
 }
 
@@ -91,16 +93,16 @@ func (s *AutoScaler) pollAPIServer() {
 	// Query the apiserver for the cluster status --- number of nodes and cores
 	clusterStatus, err := s.k8sClient.GetClusterStatus()
 	if err != nil {
-		glog.Errorf("error while counting nodes: %v\n", err)
+		glog.Errorf("Error while getting cluster status: %v\n", err)
 		return
 	}
 	glog.V(4).Infof("Total nodes %5d, schedulable nodes: %5d\n", clusterStatus.TotalNodes, clusterStatus.SchedulableNodes)
 	glog.V(4).Infof("Total cores %5d, schedulable cores: %5d\n", clusterStatus.TotalCores, clusterStatus.SchedulableCores)
 
-	// Fetch autoscaler ConfigMap data from apiserver
-	configMap, err := s.k8sClient.FetchConfigMap(s.k8sClient.GetNamespace(), s.configMapKey)
+	// Sync autoscaler ConfigMap with apiserver
+	configMap, err := s.syncConfigWithServer()
 	if err != nil {
-		glog.Errorf("error fetching scaler params: %s", err)
+		glog.Errorf("Error syncing configMap with apiserver: %v", err)
 		return
 	}
 
@@ -116,7 +118,7 @@ func (s *AutoScaler) pollAPIServer() {
 	// Query the controller for the expected replicas number
 	expReplicas, err := s.controller.GetExpectedReplicas(clusterStatus)
 	if err != nil {
-		glog.Errorf("error calculating expected replicas number: %v\n", err)
+		glog.Errorf("Error calculating expected replicas number: %v\n", err)
 		return
 	}
 	glog.V(4).Infof("Expected replica count: %3d\n", expReplicas)
@@ -124,6 +126,23 @@ func (s *AutoScaler) pollAPIServer() {
 	// Update resource target with expected replicas.
 	_, err = s.k8sClient.UpdateReplicas(expReplicas)
 	if err != nil {
-		glog.Errorf("update failure: %s\n", err)
+		glog.Errorf("Update failure: %s\n", err)
 	}
+}
+
+func (s *AutoScaler) syncConfigWithServer() (*k8sclient.ConfigMap, error) {
+	// Fetch autoscaler ConfigMap data from apiserver
+	configMap, err := s.k8sClient.FetchConfigMap(s.k8sClient.GetNamespace(), s.configMapName)
+	if err == nil {
+		return configMap, nil
+	}
+	if s.defaultParams == nil {
+		return nil, err
+	}
+	glog.V(0).Infof("ConfigMap not found: %v, will create one with default params", err)
+	configMap, err = s.k8sClient.CreateConfigMap(s.k8sClient.GetNamespace(), s.configMapName, s.defaultParams)
+	if err != nil {
+		return nil, err
+	}
+	return configMap, nil
 }

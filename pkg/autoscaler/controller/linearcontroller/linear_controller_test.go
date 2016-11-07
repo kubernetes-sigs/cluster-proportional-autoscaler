@@ -27,7 +27,7 @@ func verifyParams(t *testing.T, scalerParams, expScalerParams *linearParams) {
 		scalerParams.NodesPerReplica != expScalerParams.NodesPerReplica ||
 		scalerParams.Min != expScalerParams.Min ||
 		scalerParams.Max != expScalerParams.Max {
-		t.Errorf("parser error - Expected params %v MISMATCHED: Got %v", expScalerParams, scalerParams)
+		t.Errorf("Parser error - Expected params %v MISMATCHED: Got %v", expScalerParams, scalerParams)
 	}
 }
 
@@ -38,7 +38,7 @@ func TestControllerParser(t *testing.T) {
 		expParams *linearParams
 	}{
 		{
-			`{ 
+			`{
 		      "coresPerReplica": 2,
 		      "nodesPerReplica": 1,
 		      "min": 1,
@@ -90,14 +90,14 @@ func TestControllerParser(t *testing.T) {
 		params, err := parseParams([]byte(tc.jsonData))
 		if tc.expError {
 			if err == nil {
-				t.Errorf("unexpected parsing success. Expected failure")
+				t.Errorf("Unexpected parsing success. Expected failure")
 				spew.Dump(tc)
 				spew.Dump(params)
 			}
 			continue
 		}
 		if err != nil && !tc.expError {
-			t.Errorf("unexpected parse failure")
+			t.Errorf("Unexpected parse failure: %v", err)
 			spew.Dump(tc)
 			continue
 		}
@@ -135,7 +135,7 @@ func TestScaleFromSingleParam(t *testing.T) {
 
 	for _, tc := range testCases {
 		if replicas := testController.getExpectedReplicasFromParam(tc.numResources, testController.params.CoresPerReplica); tc.expReplicas != replicas {
-			t.Errorf("scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
 		}
 	}
 }
@@ -172,7 +172,7 @@ func TestScaleFromMultipleParams(t *testing.T) {
 
 	for _, tc := range testCases {
 		if replicas := testController.getExpectedReplicasFromParams(tc.numNodes, tc.numCores); tc.expReplicas != replicas {
-			t.Errorf("scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
 		}
 	}
 }

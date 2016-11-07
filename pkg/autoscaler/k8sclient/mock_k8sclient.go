@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-var _ = Interface(&MockK8sClient{})
+var _ = K8sClient(&MockK8sClient{})
 
 // MockK8sClient implements K8sClientInterface
 type MockK8sClient struct {
@@ -30,11 +30,19 @@ type MockK8sClient struct {
 	NumOfReplicas int
 }
 
-func (k *MockK8sClient) FetchConfigMap(namespace, configmap string) (ConfigMap, error) {
+func (k *MockK8sClient) FetchConfigMap(namespace, configmap string) (*ConfigMap, error) {
 	if k.ConfigMap.Version == "" {
-		return ConfigMap{}, fmt.Errorf("config map not exist")
+		return nil, fmt.Errorf("config map not exist")
 	}
-	return k.ConfigMap, nil
+	return &(k.ConfigMap), nil
+}
+
+func (k *MockK8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+	return nil, nil
+}
+
+func (k *MockK8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+	return nil, nil
 }
 
 func (k *MockK8sClient) GetClusterStatus() (ClusterStatus, error) {
