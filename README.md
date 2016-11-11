@@ -69,6 +69,8 @@ The equation of linear control mode as below:
 replicas = max( ceil( cores * 1/coresPerReplica ) , ceil( nodes * 1/nodesPerReplica ) )
 ```
 
+Notice that both `coresPerReplica` and `nodesPerReplica` are float.
+
 For instance, given a cluster has 4 nodes and 13 cores. With above parameters, each replica could take care of 1 node.
 So we need `4 / 1 = 4` replicas to take care of all 4 nodes. And each replica could take care of 2 cores. We need `ceil(13 / 2) = 7`
 replicas to take care of all 13 cores. Controller will choose the greater one, which is `7` here, as the result.
@@ -112,7 +114,8 @@ The replicas derived from "cores_to_replicas_map" would be `3` (because `64` < `
 The replicas derived from "nodes_to_replicas_map" would be `2` (because `100` > `2`).   
 And we would choose the larger one `3`.
 
-Either one of the `coresToReplicas` or `nodesToReplicas` could be omitted.
+Either one of the `coresToReplicas` or `nodesToReplicas` could be omitted. All elements in them should
+be int.
 
 The lowest number of replicas is set to 1.
 

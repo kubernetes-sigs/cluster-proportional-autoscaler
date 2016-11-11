@@ -144,7 +144,7 @@ func TestScaleFromMultipleParams(t *testing.T) {
 	testController := &LinearController{}
 	testController.params = &linearParams{
 		CoresPerReplica: 2,
-		NodesPerReplica: 2,
+		NodesPerReplica: 2.5,
 		Min:             2,
 		Max:             100,
 	}
@@ -162,11 +162,12 @@ func TestScaleFromMultipleParams(t *testing.T) {
 		{6, 4, 3},
 		{6, 5, 3},
 		{8, 5, 4},
-		{11, 14, 7},
-		{19, 21, 11},
+		{8, 15, 6},
+		{8, 16, 7},
+		{19, 21, 10},
 		{23, 20, 12},
-		{26, 24, 13},
-		{30, 30, 15},
+		{26, 38, 16},
+		{30, 49, 20},
 		{40, 20, 20},
 	}
 
