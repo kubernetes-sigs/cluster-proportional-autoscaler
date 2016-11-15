@@ -43,10 +43,10 @@ func NewLinearController() controller.Controller {
 }
 
 type linearParams struct {
-	CoresPerReplica int `json:"coresPerReplica"`
-	NodesPerReplica int `json:"nodesPerReplica"`
-	Min             int `json:"min"`
-	Max             int `json:"max"`
+	CoresPerReplica float64 `json:"coresPerReplica"`
+	NodesPerReplica float64 `json:"nodesPerReplica"`
+	Min             int     `json:"min"`
+	Max             int     `json:"max"`
 }
 
 func (c *LinearController) SyncConfig(configMap *k8sclient.ConfigMap) error {
@@ -110,11 +110,11 @@ func (c *LinearController) getExpectedReplicasFromParams(schedulableNodes, sched
 	return replicasFromNode
 }
 
-func (c *LinearController) getExpectedReplicasFromParam(schedulableResources, resourcesPerReplica int) int {
+func (c *LinearController) getExpectedReplicasFromParam(schedulableResources int, resourcesPerReplica float64) int {
 	if resourcesPerReplica == 0 {
 		return 1
 	}
-	res := math.Ceil(float64(schedulableResources) / float64(resourcesPerReplica))
+	res := math.Ceil(float64(schedulableResources) / resourcesPerReplica)
 	if c.params.Max != 0 {
 		res = math.Min(float64(c.params.Max), res)
 	}
