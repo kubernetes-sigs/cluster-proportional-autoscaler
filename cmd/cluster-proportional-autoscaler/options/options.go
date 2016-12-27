@@ -27,12 +27,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// AutoscalerServerConfig configures and runs an autoscaler server
+// AutoScalerConfig configures and runs an autoscaler server
 type AutoScalerConfig struct {
 	Target            string
 	ConfigMap         string
 	Namespace         string
-	Mode              string
 	DefaultParams     configMapData
 	PollPeriodSeconds int
 	PrintVer          bool
@@ -41,7 +40,6 @@ type AutoScalerConfig struct {
 func NewAutoScalerConfig() *AutoScalerConfig {
 	return &AutoScalerConfig{
 		Namespace:         os.Getenv("MY_POD_NAMESPACE"),
-		Mode:              "linear",
 		PollPeriodSeconds: 10,
 		PrintVer:          false,
 	}
@@ -55,15 +53,15 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 	}
 	if c.ConfigMap == "" {
 		errorsFound = true
-		glog.Errorf("--configmap parameter cannot be empty\n")
+		glog.Errorf("--configmap parameter cannot be empty")
 	}
 	if c.Namespace == "" {
 		errorsFound = true
-		glog.Errorf("--namespace parameter not set and failed to fallback\n")
+		glog.Errorf("--namespace parameter not set and failed to fallback")
 	}
 	if c.PollPeriodSeconds < 1 {
 		errorsFound = true
-		glog.Errorf("--poll-period-seconds cannot be less than 1\n")
+		glog.Errorf("--poll-period-seconds cannot be less than 1")
 	}
 
 	// Log all sanity check errors before returning a single error string
@@ -75,13 +73,13 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 
 func isTargetFormatValid(target string) bool {
 	if target == "" {
-		glog.Errorf("--target parameter cannot be empty\n")
+		glog.Errorf("--target parameter cannot be empty")
 		return false
 	}
 	if !strings.HasPrefix(target, "deployment/") &&
 		!strings.HasPrefix(target, "replicationcontroller/") &&
 		!strings.HasPrefix(target, "replicaset/") {
-		glog.Errorf("Target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).\n")
+		glog.Errorf("Target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
 		return false
 	}
 	return true
@@ -113,12 +111,11 @@ func (c *configMapData) Type() string {
 	return "configMapData"
 }
 
-// AddFlags adds flags for a specific ProxyServer to the specified FlagSet
+// AddFlags adds flags for a specific AutoScaler to the specified FlagSet
 func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
 	fs.StringVar(&c.ConfigMap, "configmap", c.ConfigMap, "ConfigMap containing our scaling parameters.")
 	fs.StringVar(&c.Namespace, "namespace", c.Namespace, "Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.")
-	fs.StringVar(&c.Mode, "mode", c.Mode, "Control mode(linear/ladder).")
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")
 	fs.BoolVar(&c.PrintVer, "version", c.PrintVer, "Print the version and exit.")
 	fs.Var(&c.DefaultParams, "default-params", "Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if ConfigMap is not present.")

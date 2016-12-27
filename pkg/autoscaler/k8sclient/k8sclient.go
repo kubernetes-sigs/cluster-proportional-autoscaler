@@ -117,7 +117,7 @@ func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[stri
 	if err != nil {
 		return nil, err
 	}
-	glog.V(0).Infof("Created ConfigMap %v in namespace %v\n", configmap, namespace)
+	glog.V(0).Infof("Created ConfigMap %v in namespace %v", configmap, namespace)
 	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
 }
 
@@ -130,7 +130,7 @@ func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[stri
 	if err != nil {
 		return nil, err
 	}
-	glog.V(0).Infof("Updated ConfigMap %v in namespace %v\n", configmap, namespace)
+	glog.V(0).Infof("Updated ConfigMap %v in namespace %v", configmap, namespace)
 	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
 }
 
@@ -177,8 +177,8 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	}
 	prevRelicas = scale.Spec.Replicas
 	if expReplicas != prevRelicas {
-		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]\n", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d\n", prevRelicas, expReplicas)
+		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
+		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
 		_, err = k.clientset.Extensions().Scales(k.target.namespace).Update(k.target.kind, scale)
 		if err != nil {

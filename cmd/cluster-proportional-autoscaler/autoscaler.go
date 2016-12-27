@@ -42,14 +42,14 @@ func main() {
 
 	// Perform further validation of flags.
 	if err := config.ValidateFlags(); err != nil {
-		glog.Errorf("%v\n", err)
+		glog.Errorf("%v", err)
 		os.Exit(1)
 	}
 
-	glog.V(0).Infof("Scaling Namespace: %s, Target: %s, Mode: %v\n", config.Namespace, config.Target, config.Mode)
+	glog.V(0).Infof("Scaling Namespace: %s, Target: %s", config.Namespace, config.Target)
 	scaler, err := autoscaler.NewAutoScaler(config)
 	if err != nil {
-		glog.Errorf("%v\n", err)
+		glog.Errorf("%v", err)
 		os.Exit(1)
 	}
 	// Begin autoscaling.

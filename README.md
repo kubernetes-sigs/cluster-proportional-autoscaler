@@ -12,11 +12,10 @@ Usage of cluster-proportional-autoscaler:
 ```
       --alsologtostderr[=false]: log to standard error as well as files
       --configmap="": ConfigMap containing our scaling parameters.
-      --default-params="": Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if not present.
+      --default-params=map[]: Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if ConfigMap is not present.
       --log-backtrace-at=:0: when logging hits line file:N, emit a stack trace
       --log-dir="": If non-empty, write log files in this directory
       --logtostderr[=false]: log to standard error instead of files
-      --mode="linear": Control mode --- linear/ladder. Default is the linear mode.
       --namespace="": Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.
       --poll-period-seconds=10: The time, in seconds, to check cluster status and perform autoscale.
       --stderrthreshold=2: logs at or above this threshold go to stderr
@@ -40,12 +39,12 @@ parameters table every poll interval to be up to date with the latest desired sc
 The desired number of replicas is computed by using the number of cores and nodes as input of the chosen controller.
 
 This may be later extended to more complex interpolation or exponential scaling schemes
-but it currently supports `linear` and `ladder` modes(default to `linear`).
+but it currently supports `linear` and `ladder` modes.
 
 # Control patterns and ConfigMap formats
 
-The ConfigMap provides the configuration parameters, allowing on-the-fly changes without rebuilding or
-restarting the scaler containers/pods.
+The ConfigMap provides the configuration parameters, allowing on-the-fly changes(including control mode) without
+rebuilding or restarting the scaler containers/pods.
 
 Currently the two supported ConfigMap key value is: `ladder` and `linear`, which corresponding to two supported control mode.
 

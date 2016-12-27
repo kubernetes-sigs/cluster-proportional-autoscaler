@@ -17,15 +17,13 @@ limitations under the License.
 package autoscaler
 
 import (
-	"fmt"
 	"time"
 
 	"k8s.io/client-go/1.4/pkg/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
+	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/plugin"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 
 	"github.com/golang/glog"
@@ -44,22 +42,12 @@ type AutoScaler struct {
 }
 
 func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
-	var controller controller.Controller
-	switch c.Mode {
-	case laddercontroller.ControllerType:
-		controller = laddercontroller.NewLadderController()
-	case linearcontroller.ControllerType:
-		controller = linearcontroller.NewLinearController()
-	default:
-		return nil, fmt.Errorf("not a supported control mode: %v", c.Mode)
-	}
 	newK8sClient, err := k8sclient.NewK8sClient(c.Namespace, c.Target)
 	if err != nil {
 		return nil, err
 	}
 	return &AutoScaler{
 		k8sClient:     newK8sClient,
-		controller:    controller,
 		configMapName: c.ConfigMap,
 		defaultParams: c.DefaultParams,
 		pollPeriod:    time.Second * time.Duration(c.PollPeriodSeconds),
@@ -93,11 +81,11 @@ func (s *AutoScaler) pollAPIServer() {
 	// Query the apiserver for the cluster status --- number of nodes and cores
 	clusterStatus, err := s.k8sClient.GetClusterStatus()
 	if err != nil {
-		glog.Errorf("Error while getting cluster status: %v\n", err)
+		glog.Errorf("Error while getting cluster status: %v", err)
 		return
 	}
-	glog.V(4).Infof("Total nodes %5d, schedulable nodes: %5d\n", clusterStatus.TotalNodes, clusterStatus.SchedulableNodes)
-	glog.V(4).Infof("Total cores %5d, schedulable cores: %5d\n", clusterStatus.TotalCores, clusterStatus.SchedulableCores)
+	glog.V(4).Infof("Total nodes %5d, schedulable nodes: %5d", clusterStatus.TotalNodes, clusterStatus.SchedulableNodes)
+	glog.V(4).Infof("Total cores %5d, schedulable cores: %5d", clusterStatus.TotalCores, clusterStatus.SchedulableCores)
 
 	// Sync autoscaler ConfigMap with apiserver
 	configMap, err := s.syncConfigWithServer()
@@ -108,9 +96,10 @@ func (s *AutoScaler) pollAPIServer() {
 
 	// Only sync updated ConfigMap
 	if configMap.Version != s.controller.GetParamsVersion() {
-		// Update the config
-		if err := s.controller.SyncConfig(configMap); err != nil {
-			glog.Errorf("error syncing configMap: %v\n", err)
+		// Ensure corresponding controller type and scaling params
+		s.controller, err = plugin.EnsureController(s.controller, configMap)
+		if err != nil {
+			glog.Errorf("Error ensuring controller: %v", err)
 			return
 		}
 	}
@@ -118,15 +107,15 @@ func (s *AutoScaler) pollAPIServer() {
 	// Query the controller for the expected replicas number
 	expReplicas, err := s.controller.GetExpectedReplicas(clusterStatus)
 	if err != nil {
-		glog.Errorf("Error calculating expected replicas number: %v\n", err)
+		glog.Errorf("Error calculating expected replicas number: %v", err)
 		return
 	}
-	glog.V(4).Infof("Expected replica count: %3d\n", expReplicas)
+	glog.V(4).Infof("Expected replica count: %3d", expReplicas)
 
 	// Update resource target with expected replicas.
 	_, err = s.k8sClient.UpdateReplicas(expReplicas)
 	if err != nil {
-		glog.Errorf("Update failure: %s\n", err)
+		glog.Errorf("Update failure: %s", err)
 	}
 }
 

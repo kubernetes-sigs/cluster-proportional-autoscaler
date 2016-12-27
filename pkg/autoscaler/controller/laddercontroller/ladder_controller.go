@@ -64,7 +64,7 @@ type ladderParams struct {
 }
 
 func (c *LadderController) SyncConfig(configMap *k8sclient.ConfigMap) error {
-	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries\n", c.version, configMap.Version)
+	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries", c.version, configMap.Version)
 	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
 	if err != nil {
@@ -138,4 +138,8 @@ func getExpectedReplicasFromEntries(schedulableResources int, entries []paramEnt
 		pos = pos - 1
 	}
 	return entries[pos][1]
+}
+
+func (c *LadderController) GetControllerType() string {
+	return ControllerType
 }
