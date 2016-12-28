@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/util/clock"
 	"k8s.io/client-go/1.4/pkg/util/wait"
 
@@ -29,10 +30,10 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	testConfigMap := k8sclient.ConfigMap{
-		Data:    make(map[string]string),
-		Version: `1`,
+	testConfigMap := apiv1.ConfigMap{
+		Data: make(map[string]string),
 	}
+	testConfigMap.ObjectMeta.ResourceVersion = `1`
 	testConfigMap.Data[laddercontroller.ControllerType] =
 		`{
 			"coresToReplicas":
@@ -63,7 +64,7 @@ func TestRun(t *testing.T) {
 		NumOfNodes:    0,
 		NumOfCores:    0,
 		NumOfReplicas: 0,
-		ConfigMap:     testConfigMap,
+		ConfigMap:     &testConfigMap,
 	}
 
 	fakeClock := clock.NewFakeClock(time.Now())
@@ -139,7 +140,7 @@ func TestRun(t *testing.T) {
 				[ 2,2 ]
 			]
 		}`
-	mockK8s.ConfigMap.Version = `2`
+	mockK8s.ConfigMap.ObjectMeta.ResourceVersion = `2`
 
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 200 with new configuration)\n")
@@ -156,12 +157,12 @@ func TestRun(t *testing.T) {
 	}
 
 	t.Logf("Scenario: ConfigMap is missing and later appears again\n")
-	mockK8s.ConfigMap.Version = ""
+	mockK8s.ConfigMap.ObjectMeta.ResourceVersion = ""
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("And cluster size changed in between\n")
 	mockK8s.NumOfCores = 2000
 	mockK8s.NumOfNodes = 400
-	mockK8s.ConfigMap.Version = "3"
+	mockK8s.ConfigMap.ObjectMeta.ResourceVersion = "3"
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 7 when there are 2000 cores and 400 node\n")
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 7); err != nil {
@@ -177,7 +178,7 @@ func TestRun(t *testing.T) {
 			"min": 1,
 			"max": 100
 		}`
-	mockK8s.ConfigMap.Version = `4`
+	mockK8s.ConfigMap.ObjectMeta.ResourceVersion = `4`
 
 	fakeClock.Step(fakePollPeriod)
 	t.Logf("Wait for the number of replicas be scaled to 40 with new configuration)\n")

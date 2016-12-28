@@ -32,13 +32,13 @@ import (
 // K8sClient - Wraps all needed client functionalities for autoscaler
 type K8sClient interface {
 	// FetchConfigMap fetches the requested configmap from the Apiserver
-	FetchConfigMap(namespace, configmap string) (*ConfigMap, error)
+	FetchConfigMap(namespace, configmap string) (*apiv1.ConfigMap, error)
 	// CreateConfigMap creates a configmap with given namespace, name and params
-	CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error)
+	CreateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error)
 	// UpdateConfigMap updates a configmap with given namespace, name and params
-	UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error)
+	UpdateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error)
 	// GetClusterStatus counts schedulable nodes and cores in the cluster
-	GetClusterStatus() (clusterStatus ClusterStatus, err error)
+	GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	// GetNamespace returns the namespace of target resource.
 	GetNamespace() (namespace string)
 	// UpdateReplicas updates the number of replicas for the resource and return the previous replicas count
@@ -49,7 +49,7 @@ type K8sClient interface {
 type k8sClient struct {
 	target        *scaleTarget
 	clientset     *kubernetes.Clientset
-	clusterStatus ClusterStatus
+	clusterStatus *ClusterStatus
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
@@ -95,20 +95,15 @@ func (k *k8sClient) GetNamespace() (namespace string) {
 	return k.target.namespace
 }
 
-type ConfigMap struct {
-	Data    map[string]string
-	Version string
-}
-
-func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*ConfigMap, error) {
+func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*apiv1.ConfigMap, error) {
 	cm, err := k.clientset.CoreClient.ConfigMaps(namespace).Get(configmap)
 	if err != nil {
 		return nil, err
 	}
-	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+	return cm, nil
 }
 
-func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error) {
 	providedConfigMap := apiv1.ConfigMap{}
 	providedConfigMap.ObjectMeta.Name = configmap
 	providedConfigMap.ObjectMeta.Namespace = namespace
@@ -118,10 +113,10 @@ func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[stri
 		return nil, err
 	}
 	glog.V(0).Infof("Created ConfigMap %v in namespace %v", configmap, namespace)
-	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+	return cm, nil
 }
 
-func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*ConfigMap, error) {
+func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error) {
 	providedConfigMap := apiv1.ConfigMap{}
 	providedConfigMap.ObjectMeta.Name = configmap
 	providedConfigMap.ObjectMeta.Namespace = namespace
@@ -131,9 +126,10 @@ func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[stri
 		return nil, err
 	}
 	glog.V(0).Infof("Updated ConfigMap %v in namespace %v", configmap, namespace)
-	return &ConfigMap{cm.Data, cm.ObjectMeta.ResourceVersion}, nil
+	return cm, nil
 }
 
+// ClusterStatus defines the cluster status
 type ClusterStatus struct {
 	TotalNodes       int32
 	SchedulableNodes int32
@@ -141,12 +137,12 @@ type ClusterStatus struct {
 	SchedulableCores int32
 }
 
-func (k *k8sClient) GetClusterStatus() (clusterStatus ClusterStatus, err error) {
+func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error) {
 	opt := api.ListOptions{Watch: false}
 
 	nodes, err := k.clientset.CoreClient.Nodes().List(opt)
 	if err != nil {
-		return ClusterStatus{}, err
+		return nil, err
 	}
 	clusterStatus.TotalNodes = int32(len(nodes.Items))
 	var tc resource.Quantity
@@ -162,7 +158,7 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus ClusterStatus, err error) 
 	tcInt64, tcOk := tc.AsInt64()
 	scInt64, scOk := sc.AsInt64()
 	if !tcOk || !scOk {
-		return ClusterStatus{}, fmt.Errorf("unable to compute integer values of schedulable cores in the cluster")
+		return nil, fmt.Errorf("unable to compute integer values of schedulable cores in the cluster")
 	}
 	clusterStatus.TotalCores = int32(tcInt64)
 	clusterStatus.SchedulableCores = int32(scInt64)

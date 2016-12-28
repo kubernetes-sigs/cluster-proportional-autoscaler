@@ -17,14 +17,17 @@ limitations under the License.
 package controller
 
 import (
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
+
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
 
+// Controller defines the interface every controller should implement
 type Controller interface {
 	// GetExpectedReplicas returns the expected replicas based on cluster status
-	GetExpectedReplicas(k8sclient.ClusterStatus) (int32, error)
-	// SyncConfig synces the ConfigMap with controller
-	SyncConfig(*k8sclient.ConfigMap) error
+	GetExpectedReplicas(*k8sclient.ClusterStatus) (int32, error)
+	// SyncConfig syncs the ConfigMap with controller
+	SyncConfig(*apiv1.ConfigMap) error
 	// GetParamsVersion returns the latest parameters version from controller
 	GetParamsVersion() string
 	// GetControllerType returns the controller type

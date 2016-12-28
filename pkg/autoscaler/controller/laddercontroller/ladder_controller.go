@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"sort"
 
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
+
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 
@@ -30,14 +32,17 @@ import (
 var _ = controller.Controller(&LadderController{})
 
 const (
+	// ControllerType defines the controller type string
 	ControllerType = "ladder"
 )
 
+// LadderController uses ladder control pattern
 type LadderController struct {
 	params  *ladderParams
 	version string
 }
 
+// NewLadderController returns a new ladder controller
 func NewLadderController() controller.Controller {
 	return &LadderController{}
 }
@@ -63,8 +68,8 @@ type ladderParams struct {
 	NodesToReplicas paramEntries `json:"nodesToReplicas"`
 }
 
-func (c *LadderController) SyncConfig(configMap *k8sclient.ConfigMap) error {
-	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries", c.version, configMap.Version)
+func (c *LadderController) SyncConfig(configMap *apiv1.ConfigMap) error {
+	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries", c.version, configMap.ObjectMeta.ResourceVersion)
 	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
 	if err != nil {
@@ -73,7 +78,7 @@ func (c *LadderController) SyncConfig(configMap *k8sclient.ConfigMap) error {
 	sort.Sort(params.CoresToReplicas)
 	sort.Sort(params.NodesToReplicas)
 	c.params = params
-	c.version = configMap.Version
+	c.version = configMap.ObjectMeta.ResourceVersion
 	return nil
 }
 
@@ -106,7 +111,7 @@ func (c *LadderController) GetParamsVersion() string {
 	return c.version
 }
 
-func (c *LadderController) GetExpectedReplicas(status k8sclient.ClusterStatus) (int32, error) {
+func (c *LadderController) GetExpectedReplicas(status *k8sclient.ClusterStatus) (int32, error) {
 	// Get the expected replicas for the currently schedulable nodes and cores
 	expReplicas := int32(c.getExpectedReplicasFromParams(int(status.SchedulableNodes), int(status.SchedulableCores)))
 
