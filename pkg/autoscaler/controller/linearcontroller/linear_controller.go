@@ -50,7 +50,7 @@ type linearParams struct {
 }
 
 func (c *LinearController) SyncConfig(configMap *k8sclient.ConfigMap) error {
-	glog.V(0).Infof("ConfigMap version change (old: %s new: %s) - rebuilding params\n", c.version, configMap.Version)
+	glog.V(0).Infof("ConfigMap version change (old: %s new: %s) - rebuilding params", c.version, configMap.Version)
 	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
 	if err != nil {
@@ -119,4 +119,8 @@ func (c *LinearController) getExpectedReplicasFromParam(schedulableResources int
 		res = math.Min(float64(c.params.Max), res)
 	}
 	return int(math.Max(float64(c.params.Min), res))
+}
+
+func (c *LinearController) GetControllerType() string {
+	return ControllerType
 }

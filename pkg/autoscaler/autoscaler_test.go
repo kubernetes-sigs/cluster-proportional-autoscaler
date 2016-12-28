@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/1.4/pkg/util/wait"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
+	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
 
@@ -166,10 +167,43 @@ func TestRun(t *testing.T) {
 	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 7); err != nil {
 		t.Fatalf("Timeout waiting for condition: %v", err)
 	}
+
+	t.Logf("Scenario: Switch control mode on the fly\n")
+	delete(mockK8s.ConfigMap.Data, laddercontroller.ControllerType)
+	mockK8s.ConfigMap.Data[linearcontroller.ControllerType] =
+		`{
+			"coresPerReplica": 100,
+			"nodesPerReplica": 10,
+			"min": 1,
+			"max": 100
+		}`
+	mockK8s.ConfigMap.Version = `4`
+
+	fakeClock.Step(fakePollPeriod)
+	t.Logf("Wait for the number of replicas be scaled to 40 with new configuration)\n")
+	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 40); err != nil {
+		t.Fatalf("Timeout waiting for condition: %v", err)
+	}
+
+	mockK8s.NumOfCores = 1600
+	mockK8s.NumOfNodes = 100
+	fakeClock.Step(fakePollPeriod)
+	t.Logf("Wait for the number of replicas be scaled to 16 when there are 1600 cores and 100 node\n")
+	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 16); err != nil {
+		t.Fatalf("Timeout waiting for condition: %v", err)
+	}
+
+	mockK8s.NumOfCores = 100000
+	mockK8s.NumOfNodes = 20000
+	fakeClock.Step(fakePollPeriod)
+	t.Logf("Wait for the number of replicas be scaled to 100 when there are 100000 cores and 20000 node\n")
+	if err := waitForReplicasNumberSatisfy(t, &mockK8s, 100); err != nil {
+		t.Fatalf("Timeout waiting for condition: %v", err)
+	}
 }
 
 func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient, replicas int) error {
-	return wait.Poll(5*time.Millisecond, 5*time.Second, func() (done bool, err error) {
+	return wait.Poll(50*time.Millisecond, 3*time.Second, func() (done bool, err error) {
 		if mockK8s.NumOfReplicas != replicas {
 			t.Logf("Error number of replicas, expected: %d, got %d\n", replicas, mockK8s.NumOfReplicas)
 			return false, nil

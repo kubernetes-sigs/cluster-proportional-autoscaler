@@ -27,4 +27,6 @@ type Controller interface {
 	SyncConfig(*k8sclient.ConfigMap) error
 	// GetParamsVersion returns the latest parameters version from controller
 	GetParamsVersion() string
+	// GetControllerType returns the controller type
+	GetControllerType() string
 }
