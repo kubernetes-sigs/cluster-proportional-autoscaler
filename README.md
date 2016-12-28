@@ -1,6 +1,7 @@
 # Horizontal cluster-proportional-autoscaler container
 
 [![Build Status](https://travis-ci.org/kubernetes-incubator/cluster-proportional-autoscaler.png)](https://travis-ci.org/kubernetes-incubator/cluster-proportional-autoscaler)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-incubator/cluster-proportional-autoscaler)](https://goreportcard.com/report/github.com/kubernetes-incubator/cluster-proportional-autoscaler)
 
 This container image watches over the number of schedulable nodes and cores of the cluster and resizes
 the number of replicas for the required resource. This functionality may be desirable for applications
