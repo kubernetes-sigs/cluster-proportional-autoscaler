@@ -19,6 +19,7 @@ package autoscaler
 import (
 	"time"
 
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
@@ -41,6 +42,7 @@ type AutoScaler struct {
 	readyCh       chan<- struct{} // For testing.
 }
 
+// NewAutoScaler returns a new AutoScaler
 func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	newK8sClient, err := k8sclient.NewK8sClient(c.Namespace, c.Target)
 	if err != nil {
@@ -95,7 +97,7 @@ func (s *AutoScaler) pollAPIServer() {
 	}
 
 	// Only sync updated ConfigMap
-	if configMap.Version != s.controller.GetParamsVersion() {
+	if configMap.ObjectMeta.ResourceVersion != s.controller.GetParamsVersion() {
 		// Ensure corresponding controller type and scaling params
 		s.controller, err = plugin.EnsureController(s.controller, configMap)
 		if err != nil {
@@ -119,7 +121,7 @@ func (s *AutoScaler) pollAPIServer() {
 	}
 }
 
-func (s *AutoScaler) syncConfigWithServer() (*k8sclient.ConfigMap, error) {
+func (s *AutoScaler) syncConfigWithServer() (*apiv1.ConfigMap, error) {
 	// Fetch autoscaler ConfigMap data from apiserver
 	configMap, err := s.k8sClient.FetchConfigMap(s.k8sClient.GetNamespace(), s.configMapName)
 	if err == nil {

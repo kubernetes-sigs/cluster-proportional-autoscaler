@@ -37,6 +37,7 @@ type AutoScalerConfig struct {
 	PrintVer          bool
 }
 
+// NewAutoScalerConfig returns a Autoscaler config
 func NewAutoScalerConfig() *AutoScalerConfig {
 	return &AutoScalerConfig{
 		Namespace:         os.Getenv("MY_POD_NAMESPACE"),
@@ -45,6 +46,7 @@ func NewAutoScalerConfig() *AutoScalerConfig {
 	}
 }
 
+// ValidateFlags validates whether flags are set up correctly
 func (c *AutoScalerConfig) ValidateFlags() error {
 	var errorsFound bool
 	c.Target = strings.ToLower(c.Target)

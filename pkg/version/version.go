@@ -16,4 +16,5 @@ limitations under the License.
 
 package version
 
+// VERSION defines the version
 var VERSION = "UNKNOWN"

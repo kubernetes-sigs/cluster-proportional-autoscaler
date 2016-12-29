@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"math"
 
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
+
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 
@@ -30,14 +32,17 @@ import (
 var _ = controller.Controller(&LinearController{})
 
 const (
+	// ControllerType defines the controller type string
 	ControllerType = "linear"
 )
 
+// LinearController uses linear control pattern
 type LinearController struct {
 	params  *linearParams
 	version string
 }
 
+// NewLinearController returns a new linear controller
 func NewLinearController() controller.Controller {
 	return &LinearController{}
 }
@@ -49,15 +54,15 @@ type linearParams struct {
 	Max             int     `json:"max"`
 }
 
-func (c *LinearController) SyncConfig(configMap *k8sclient.ConfigMap) error {
-	glog.V(0).Infof("ConfigMap version change (old: %s new: %s) - rebuilding params", c.version, configMap.Version)
+func (c *LinearController) SyncConfig(configMap *apiv1.ConfigMap) error {
+	glog.V(0).Infof("ConfigMap version change (old: %s new: %s) - rebuilding params", c.version, configMap.ObjectMeta.ResourceVersion)
 	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
 	if err != nil {
 		return fmt.Errorf("error parsing linear params: %s", err)
 	}
 	c.params = params
-	c.version = configMap.Version
+	c.version = configMap.ObjectMeta.ResourceVersion
 	return nil
 }
 
@@ -92,7 +97,7 @@ func (c *LinearController) GetParamsVersion() string {
 	return c.version
 }
 
-func (c *LinearController) GetExpectedReplicas(status k8sclient.ClusterStatus) (int32, error) {
+func (c *LinearController) GetExpectedReplicas(status *k8sclient.ClusterStatus) (int32, error) {
 	// Get the expected replicas for the currently schedulable nodes and cores
 	expReplicas := int32(c.getExpectedReplicasFromParams(int(status.SchedulableNodes), int(status.SchedulableCores)))
 

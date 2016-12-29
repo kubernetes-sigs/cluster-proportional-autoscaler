@@ -19,16 +19,17 @@ package plugin
 import (
 	"fmt"
 
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
+
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 
 	"github.com/golang/glog"
 )
 
 // EnsureController ensures controller type and scaling params
-func EnsureController(cont controller.Controller, configMap *k8sclient.ConfigMap) (controller.Controller, error) {
+func EnsureController(cont controller.Controller, configMap *apiv1.ConfigMap) (controller.Controller, error) {
 	// Expect only one entry, which uses the name of control mode as the key
 	if len(configMap.Data) != 1 {
 		return nil, fmt.Errorf("invalid configMap format, expected only one entry, got: %v", configMap.Data)

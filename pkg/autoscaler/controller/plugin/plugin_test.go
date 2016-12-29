@@ -19,16 +19,16 @@ package plugin
 import (
 	"testing"
 
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
+	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
 )
 
 func TestEnsureController(t *testing.T) {
 	testCases := []struct {
-		configMap *k8sclient.ConfigMap
+		configMap *apiv1.ConfigMap
 		expError  bool
 	}{
 		{
-			&k8sclient.ConfigMap{
+			&apiv1.ConfigMap{
 				Data: map[string]string{
 					"invalidmode": "",
 				},
@@ -36,7 +36,7 @@ func TestEnsureController(t *testing.T) {
 			true,
 		},
 		{
-			&k8sclient.ConfigMap{
+			&apiv1.ConfigMap{
 				Data: map[string]string{
 					"toomanyentries1": "",
 					"toomanyentries2": "",
@@ -45,7 +45,7 @@ func TestEnsureController(t *testing.T) {
 			true,
 		},
 		{
-			&k8sclient.ConfigMap{
+			&apiv1.ConfigMap{
 				Data: map[string]string{
 					"linear": "{\"nodesPerReplica\":1}",
 				},
