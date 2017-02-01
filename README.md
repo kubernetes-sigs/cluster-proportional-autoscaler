@@ -3,6 +3,8 @@
 [![Build Status](https://travis-ci.org/kubernetes-incubator/cluster-proportional-autoscaler.png)](https://travis-ci.org/kubernetes-incubator/cluster-proportional-autoscaler)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-incubator/cluster-proportional-autoscaler)](https://goreportcard.com/report/github.com/kubernetes-incubator/cluster-proportional-autoscaler)
 
+## Overview
+
 This container image watches over the number of schedulable nodes and cores of the cluster and resizes
 the number of replicas for the required resource. This functionality may be desirable for applications
 that need to be autoscaled with the size of the cluster, such as DNS and other services that scale
@@ -26,7 +28,11 @@ Usage of cluster-proportional-autoscaler:
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
 ```
 
-# Implementation Details
+## Examples
+
+Please try out the examples in [the examples folder](examples/README.md).
+
+## Implementation Details
 
 The code in this module is a Kubernetes Golang API client that, using the default service account credentials
 available to Golang clients running inside pods, it connects to the API server and polls for the number of nodes
@@ -35,21 +41,21 @@ and cores in the cluster.
 The scaling parameters and data points are provided via a ConfigMap to the autoscaler and it refreshes its
 parameters table every poll interval to be up to date with the latest desired scaling parameters.
 
-## Calculation of number of replicas
+### Calculation of number of replicas
 
 The desired number of replicas is computed by using the number of cores and nodes as input of the chosen controller.
 
 This may be later extended to more complex interpolation or exponential scaling schemes
 but it currently supports `linear` and `ladder` modes.
 
-# Control patterns and ConfigMap formats
+## Control patterns and ConfigMap formats
 
 The ConfigMap provides the configuration parameters, allowing on-the-fly changes(including control mode) without
 rebuilding or restarting the scaler containers/pods.
 
 Currently the two supported ConfigMap key value is: `ladder` and `linear`, which corresponding to two supported control mode.
 
-## Linear Mode
+### Linear Mode
 
 Parameters in ConfigMap must be JSON and use `linear` as key. The sub-keys as below indicates:
 
@@ -80,7 +86,7 @@ If not set, `min` would be default to 1.
 
 The lowest number of replicas is set to 1.
 
-## Ladder Mode
+### Ladder Mode
 
 Parameters in ConfigMap must be JSON and use `ladder` as key. The sub-keys as below indicates:
 
@@ -119,19 +125,7 @@ be int.
 
 The lowest number of replicas is set to 1.
 
-## Example deployment files
-
-There are several example yaml files in the example folder, each of them will deploy an autoscaler pod watch and resizes the Deployment replicas of the nginx server.
-They are using different control modes. The autoscaler accepts default parameters passed by `--default-params` flag. Default ConfigMap will be created/re-created if default params present. Also see the example yaml files for example.
-
-Use below command to create / delete one of the example:
-```
-kubectl create -f linear.yaml
-...
-kubectl delete -f linear.yaml
-```
-
-# Comparisons to the Horizontal Pod Autoscaler feature
+## Comparisons to the Horizontal Pod Autoscaler feature
 
 The [Horizontal Pod Autoscaler](http://kubernetes.io/docs/user-guide/horizontal-pod-autoscaling/) is a top-level Kubernetes API resource. It is a closed feedback loop autoscaler which monitors CPU utilization of the pods and scales the number of replicas automatically. It requires the CPU resources to be defined for all containers in the target pods and also requires heapster to be running to provide CPU utilization metrics.
 
