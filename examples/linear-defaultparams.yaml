@@ -47,11 +47,6 @@ spec:
       containers:
         - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0
           name: autoscaler
-          env:
-            - name: MY_POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
           command:
             - /cluster-proportional-autoscaler
             - --namespace=default
@@ -61,3 +56,5 @@ spec:
             - --default-params={"linear":{"coresPerReplica":2,"nodesPerReplica":1,"min":1}}
             - --logtostderr=true
             - --v=2
+      # Uncomment below line if you are using RBAC configs under the RBAC folder.
+      # serviceAccountName: cluster-proportional-autoscaler
