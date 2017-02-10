@@ -141,9 +141,10 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	opt := api.ListOptions{Watch: false}
 
 	nodes, err := k.clientset.CoreClient.Nodes().List(opt)
-	if err != nil {
+	if err != nil || nodes == nil {
 		return nil, err
 	}
+	clusterStatus = &ClusterStatus{}
 	clusterStatus.TotalNodes = int32(len(nodes.Items))
 	var tc resource.Quantity
 	var sc resource.Quantity

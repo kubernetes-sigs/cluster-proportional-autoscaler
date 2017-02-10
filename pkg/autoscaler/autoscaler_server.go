@@ -91,16 +91,16 @@ func (s *AutoScaler) pollAPIServer() {
 
 	// Sync autoscaler ConfigMap with apiserver
 	configMap, err := s.syncConfigWithServer()
-	if err != nil {
+	if err != nil || configMap == nil {
 		glog.Errorf("Error syncing configMap with apiserver: %v", err)
 		return
 	}
 
-	// Only sync updated ConfigMap
-	if configMap.ObjectMeta.ResourceVersion != s.controller.GetParamsVersion() {
-		// Ensure corresponding controller type and scaling params
+	// Only sync updated ConfigMap or before controller is set.
+	if s.controller == nil || configMap.ObjectMeta.ResourceVersion != s.controller.GetParamsVersion() {
+		// Ensure corresponding controller type and scaling params.
 		s.controller, err = plugin.EnsureController(s.controller, configMap)
-		if err != nil {
+		if err != nil || s.controller == nil {
 			glog.Errorf("Error ensuring controller: %v", err)
 			return
 		}
