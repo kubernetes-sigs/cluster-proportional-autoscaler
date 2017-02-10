@@ -48,10 +48,11 @@ func NewLinearController() controller.Controller {
 }
 
 type linearParams struct {
-	CoresPerReplica float64 `json:"coresPerReplica"`
-	NodesPerReplica float64 `json:"nodesPerReplica"`
-	Min             int     `json:"min"`
-	Max             int     `json:"max"`
+	CoresPerReplica           float64 `json:"coresPerReplica"`
+	NodesPerReplica           float64 `json:"nodesPerReplica"`
+	Min                       int     `json:"min"`
+	Max                       int     `json:"max"`
+	PreventSinglePointFailure bool    `json:"preventSinglePointFailure"`
 }
 
 func (c *LinearController) SyncConfig(configMap *apiv1.ConfigMap) error {
@@ -107,6 +108,13 @@ func (c *LinearController) GetExpectedReplicas(status *k8sclient.ClusterStatus) 
 func (c *LinearController) getExpectedReplicasFromParams(schedulableNodes, schedulableCores int) int {
 	replicasFromCore := c.getExpectedReplicasFromParam(schedulableCores, c.params.CoresPerReplica)
 	replicasFromNode := c.getExpectedReplicasFromParam(schedulableNodes, c.params.NodesPerReplica)
+	// Prevent single point of failure by having at least 2 replicas when
+	// there are more than one node.
+	if c.params.PreventSinglePointFailure &&
+		schedulableNodes > 1 &&
+		replicasFromNode < 2 {
+		replicasFromNode = 2
+	}
 
 	// Returns the results which yields the most replicas
 	if replicasFromCore > replicasFromNode {
