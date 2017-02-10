@@ -66,25 +66,32 @@ data:
       "coresPerReplica": 2,
       "nodesPerReplica": 1,
       "min": 1,
-      "max": 100
+      "max": 100,
+      "preventSinglePointFailure": true
     }
 ```
 
 The equation of linear control mode as below:
 ```
 replicas = max( ceil( cores * 1/coresPerReplica ) , ceil( nodes * 1/nodesPerReplica ) )
+replicas = min(replicas, max)
+replicas = max(replicas, min)
 ```
 
-Notice that both `coresPerReplica` and `nodesPerReplica` are float.
+When `preventSinglePointFailure` is set to `true`, controller ensures at least 2 replicas
+if there are more than one node.
 
 For instance, given a cluster has 4 nodes and 13 cores. With above parameters, each replica could take care of 1 node.
 So we need `4 / 1 = 4` replicas to take care of all 4 nodes. And each replica could take care of 2 cores. We need `ceil(13 / 2) = 7`
 replicas to take care of all 13 cores. Controller will choose the greater one, which is `7` here, as the result.
 
-Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. Both `min` and `max ` could be omitted.
-If not set, `min` would be default to 1.
+Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max` and
+`preventSinglePointFailure` is optional. If not set, `min` would be default to `1`,
+`preventSinglePointFailure` will be default to `false`.
 
-The lowest number of replicas is set to 1.
+Side notes:
+- Both `coresPerReplica` and `nodesPerReplica` are float.
+- The lowest replicas will be set to 1 when `min` is less than 1.
 
 ### Ladder Mode
 
