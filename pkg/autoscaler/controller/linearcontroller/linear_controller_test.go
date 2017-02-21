@@ -42,7 +42,8 @@ func TestControllerParser(t *testing.T) {
 		      "coresPerReplica": 2,
 		      "nodesPerReplica": 1,
 		      "min": 1,
-		      "max": 100
+		      "max": 100,
+		      "preventSinglePointFailure": true
 		    }`,
 			false,
 			&linearParams{
@@ -50,6 +51,7 @@ func TestControllerParser(t *testing.T) {
 				NodesPerReplica: 1,
 				Min:             1,
 				Max:             100,
+				PreventSinglePointFailure: true,
 			},
 		},
 		{ // Invalid JSON
@@ -80,6 +82,18 @@ func TestControllerParser(t *testing.T) {
 			`{ 
 		      "min": 1,
 		      "max": 100
+		    }`,
+			true,
+			&linearParams{},
+		},
+		// Wrong input for PreventSinglePointFailure.
+		{
+			`{
+		      "coresPerReplica": 2,
+		      "nodesPerReplica": 1,
+		      "min": 1,
+		      "max": 100,
+		      "preventSinglePointFailure": invalid,
 		    }`,
 			true,
 			&linearParams{},
@@ -145,8 +159,9 @@ func TestScaleFromMultipleParams(t *testing.T) {
 	testController.params = &linearParams{
 		CoresPerReplica: 2,
 		NodesPerReplica: 2.5,
-		Min:             2,
+		Min:             1,
 		Max:             100,
+		PreventSinglePointFailure: true,
 	}
 
 	testCases := []struct {
@@ -154,7 +169,7 @@ func TestScaleFromMultipleParams(t *testing.T) {
 		numNodes    int
 		expReplicas int
 	}{
-		{0, 0, 2},
+		{0, 0, 1},
 		{1, 2, 2},
 		{2, 3, 2},
 		{3, 4, 2},
