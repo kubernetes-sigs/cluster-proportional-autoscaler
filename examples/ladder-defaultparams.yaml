@@ -45,13 +45,12 @@ spec:
         app: autoscaler
     spec:
       containers:
-        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0
+        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.1.0
           name: autoscaler
           command:
             - /cluster-proportional-autoscaler
             - --namespace=default
             - --configmap=nginx-autoscaler
-            - --mode=ladder
             - --target=deployment/nginx-autoscale-example
             - --default-params={"ladder":{"coresToReplicas":[[1, 1],[2, 2],[3, 4],[512, 5]],"nodesToReplicas":[[ 1,1 ],[ 2,2 ]]}}
             - --logtostderr=true

@@ -28,7 +28,7 @@ ARCH ?= amd64
 VERSION := $(shell git describe --always --dirty)
 #
 # This version-strategy uses a manual value to set the version string
-# VERSION := 1.0.0
+# VERSION := 1.1.0
 
 ###
 ### These variables should not need tweaking.
