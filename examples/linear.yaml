@@ -22,7 +22,7 @@ data:
     { 
       "coresPerReplica": 2,
       "nodesPerReplica": 1,
-      "min": 1
+      "preventSinglePointFailure": true
     }
 ---
 apiVersion: extensions/v1beta1
@@ -58,13 +58,12 @@ spec:
         app: autoscaler
     spec:
       containers:
-        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0
+        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.1.0
           name: autoscaler
           command:
             - /cluster-proportional-autoscaler
             - --namespace=default
             - --configmap=nginx-autoscaler
-            - --mode=linear
             - --target=deployment/nginx-autoscale-example
             - --logtostderr=true
             - --v=2
