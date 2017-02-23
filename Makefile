@@ -28,7 +28,7 @@ ARCH ?= amd64
 VERSION := $(shell git describe --always --dirty)
 #
 # This version-strategy uses a manual value to set the version string
-# VERSION := 1.1.0
+# VERSION := 1.1.1
 
 ###
 ### These variables should not need tweaking.
@@ -114,7 +114,7 @@ container-name:
 
 push: .push-$(DOTFILE_IMAGE) push-name
 .push-$(DOTFILE_IMAGE): .container-$(DOTFILE_IMAGE)
-	@gcloud docker push $(IMAGE):$(VERSION)
+	@gcloud docker -- push $(IMAGE):$(VERSION)
 	@docker images -q $(IMAGE):$(VERSION) > $@
 
 push-name:
