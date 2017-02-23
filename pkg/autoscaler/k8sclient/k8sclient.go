@@ -58,6 +58,8 @@ func NewK8sClient(namespace, target string) (K8sClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Use protobufs for communication with apiserver.
+	config.ContentType = "application/vnd.kubernetes.protobuf"
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
