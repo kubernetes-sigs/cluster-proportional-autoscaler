@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/util/clock"
-	"k8s.io/client-go/1.4/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/util/wait"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
