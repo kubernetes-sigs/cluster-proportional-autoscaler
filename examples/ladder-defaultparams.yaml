@@ -45,7 +45,7 @@ spec:
         app: autoscaler
     spec:
       containers:
-        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.1.1
+        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.1.2
           name: autoscaler
           command:
             - /cluster-proportional-autoscaler
@@ -56,4 +56,4 @@ spec:
             - --logtostderr=true
             - --v=2
       # Uncomment below line if you are using RBAC configs under the RBAC folder.
-      # serviceAccountName: cluster-proportional-autoscaler
+      # serviceAccountName: cluster-proportional-autoscaler-example

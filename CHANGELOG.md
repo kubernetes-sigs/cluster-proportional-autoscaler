@@ -1,3 +1,6 @@
+### Version 1.1.2 (Thu June 1 2017 Zihong Zheng <zihongz@google.com>)
+ - Update client-go to 3.0 beta.
+
 ### Version 1.1.1 (Thu February 23 2017 Zihong Zheng <zihongz@google.com>)
  - Use protobufs for communication with apiserver.
 
