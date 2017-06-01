@@ -19,7 +19,7 @@ package plugin
 import (
 	"testing"
 
-	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func TestEnsureController(t *testing.T) {

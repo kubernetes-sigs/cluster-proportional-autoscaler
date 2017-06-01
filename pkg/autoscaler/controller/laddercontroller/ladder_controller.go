@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sort"
 
-	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"

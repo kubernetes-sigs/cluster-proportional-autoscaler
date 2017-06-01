@@ -19,8 +19,8 @@ package autoscaler
 import (
 	"time"
 
-	apiv1 "k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/util/clock"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
