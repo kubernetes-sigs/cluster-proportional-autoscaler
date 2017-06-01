@@ -15,13 +15,13 @@
 kind: ServiceAccount
 apiVersion: v1
 metadata:
-  name: cluster-proportional-autoscaler
+  name: cluster-proportional-autoscaler-example
   namespace: default
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: cluster-proportional-autoscaler
+  name: cluster-proportional-autoscaler-example
 rules:
   - apiGroups: [""]
     resources: ["nodes"]
@@ -39,12 +39,12 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: cluster-proportional-autoscaler
+  name: cluster-proportional-autoscaler-example
 subjects:
   - kind: ServiceAccount
-    name: cluster-proportional-autoscaler
+    name: cluster-proportional-autoscaler-example
     namespace: default
 roleRef:
   kind: ClusterRole
-  name: cluster-proportional-autoscaler
+  name: cluster-proportional-autoscaler-example
   apiGroup: rbac.authorization.k8s.io
