@@ -1,3 +1,6 @@
+### Version 1.1.2-r2 (Mon June 12 2017 Zihong Zheng <zihongz@google.com>)
+ - Update base image and rebuild.
+
 ### Version 1.1.2 (Thu June 1 2017 Zihong Zheng <zihongz@google.com>)
  - Update client-go to 3.0 beta.
 
