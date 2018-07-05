@@ -264,6 +264,10 @@
 			"Rev": "98c470feb44de033f26efb4af98a19f804ffffdc"
 		},
 		{
+			"ImportPath": "k8s.io/apimachinery/pkg/util/diff",
+			"Rev": "98c470feb44de033f26efb4af98a19f804ffffdc"
+		},
+		{
 			"ImportPath": "k8s.io/apimachinery/pkg/util/errors",
 			"Rev": "98c470feb44de033f26efb4af98a19f804ffffdc"
 		},
@@ -664,6 +668,11 @@
 		},
 		{
 			"ImportPath": "k8s.io/client-go/rest/watch",
+			"Comment": "v3.0.0-beta.0-23-g117378e",
+			"Rev": "117378eef311e1a8ae898ddbde22c4df522079f0"
+		},
+		{
+			"ImportPath": "k8s.io/client-go/tools/cache",
 			"Comment": "v3.0.0-beta.0-23-g117378e",
 			"Rev": "117378eef311e1a8ae898ddbde22c4df522079f0"
 		},
