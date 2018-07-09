@@ -19,12 +19,17 @@ package k8sclient
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/golang/glog"
 )
@@ -50,6 +55,8 @@ type k8sClient struct {
 	target        *scaleTarget
 	clientset     *kubernetes.Clientset
 	clusterStatus *ClusterStatus
+	nodeStore     cache.Store
+	reflector     *cache.Reflector
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
@@ -70,9 +77,24 @@ func NewK8sClient(namespace, target string) (K8sClient, error) {
 		return nil, err
 	}
 
+	// Start propagating contents of the nodeStore.
+	nodeListWatch := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return clientset.Core().Nodes().List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return clientset.Core().Nodes().Watch(options)
+		},
+	}
+	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	reflector := cache.NewReflector(nodeListWatch, &apiv1.Node{}, nodeStore, 0)
+	reflector.Run()
+
 	return &k8sClient{
-		clientset: clientset,
 		target:    scaleTarget,
+		clientset: clientset,
+		nodeStore: nodeStore,
+		reflector: reflector,
 	}, nil
 }
 
@@ -140,17 +162,31 @@ type ClusterStatus struct {
 }
 
 func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error) {
-	opt := metav1.ListOptions{Watch: false}
-
-	nodes, err := k.clientset.CoreV1().Nodes().List(opt)
-	if err != nil || nodes == nil {
+	// TODO: Consider moving this to NewK8sClient method and failing fast when
+	// reflector can't initialize. That is a tradeoff between silently non-working
+	// component and explicit restarts of it. In majority of the cases the restart
+	// won't repair it - though it may give better visibility into problems.
+	err = wait.PollImmediate(250*time.Millisecond, 5*time.Second, func() (bool, error) {
+		if k.reflector.LastSyncResourceVersion() == "" {
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
 		return nil, err
 	}
+	nodes := k.nodeStore.List()
+
 	clusterStatus = &ClusterStatus{}
-	clusterStatus.TotalNodes = int32(len(nodes.Items))
+	clusterStatus.TotalNodes = int32(len(nodes))
 	var tc resource.Quantity
 	var sc resource.Quantity
-	for _, node := range nodes.Items {
+	for i := range nodes {
+		node, ok := nodes[i].(*apiv1.Node)
+		if !ok {
+			glog.Errorf("Unexpected object: %#v", nodes[i])
+			continue
+		}
 		tc.Add(node.Status.Capacity[apiv1.ResourceCPU])
 		if !node.Spec.Unschedulable {
 			clusterStatus.SchedulableNodes++
