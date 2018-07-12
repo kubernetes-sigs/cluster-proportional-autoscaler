@@ -1,3 +1,6 @@
+### Version 1.2.0 (Wed July 11 2018 Zihong Zheng <zihongz@google.com>)
+ - Watch nodes instead of periodic polls.
+
 ### Version 1.1.2-r2 (Mon June 12 2017 Zihong Zheng <zihongz@google.com>)
  - Update base image and rebuild.
 
