@@ -30,7 +30,7 @@ Usage of cluster-proportional-autoscaler:
 
 ## Examples
 
-Please try out the examples in [the examples folder](examples/README.md).
+Please try out the examples in [the examples folder](examples/).
 
 ## Implementation Details
 

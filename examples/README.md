@@ -26,4 +26,4 @@ kubectl create -f RBAC-configs.yaml
 kubectl delete -f RBAC-configs.yaml
 ```
 
-RBAC documentation: http://kubernetes.io/docs/admin/authorization/
+RBAC documentation: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
