@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM ARG_FROM
+FROM scratch
 
 MAINTAINER Zihong Zheng <zihongz@google.com>
 
 ADD bin/ARG_ARCH/ARG_BIN /ARG_BIN
 
-USER nobody:nobody
+# nobody:nobody
+USER 65534:65534
 ENTRYPOINT ["/ARG_BIN"]
