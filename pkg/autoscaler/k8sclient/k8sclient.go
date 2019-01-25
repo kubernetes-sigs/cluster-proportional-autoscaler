@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
+	autoscalingv1 "k8s.io/client-go/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
@@ -206,6 +208,13 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 }
 
 func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err error) {
+	prevRelicas, err = k.updateReplicasAppsV1(expReplicas)
+	if err == nil || !apierrors.IsForbidden(err) {
+		return prevRelicas, err
+	}
+	glog.V(1).Infof("Falling back to extensions/v1beta1, error using apps/v1: %v", err)
+
+	// Fall back to using the extensions API if we get a forbidden error
 	scale, err := k.clientset.Extensions().Scales(k.target.namespace).Get(k.target.kind, k.target.name)
 	if err != nil {
 		return 0, err
@@ -221,4 +230,56 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 		}
 	}
 	return prevRelicas, nil
+}
+
+func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, err error) {
+	req, err := requestForTarget(k.clientset.Apps().RESTClient().Get(), k.target)
+	if err != nil {
+		return 0, err
+	}
+
+	scale := &autoscalingv1.Scale{}
+	if err = req.Do().Into(scale); err != nil {
+		return 0, err
+	}
+
+	prevRelicas = scale.Spec.Replicas
+	if expReplicas != prevRelicas {
+		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
+		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
+		scale.Spec.Replicas = expReplicas
+		req, err = requestForTarget(k.clientset.Apps().RESTClient().Put(), k.target)
+		if err != nil {
+			return 0, err
+		}
+		if err = req.Body(scale).Do().Error(); err != nil {
+			return 0, err
+		}
+	}
+
+	return prevRelicas, nil
+}
+
+func requestForTarget(req *rest.Request, target *scaleTarget) (*rest.Request, error) {
+	var absPath, resource string
+	// Support the kinds we allowed scaling via the extensions API group
+	// TODO: switch to use the polymorphic scale client once client-go versions are updated
+	switch strings.ToLower(target.kind) {
+	case "deployment", "deployments":
+		absPath = "/apis/apps/v1"
+		resource = "deployments"
+	case "replicaset", "replicasets":
+		absPath = "/apis/apps/v1"
+		resource = "replicasets"
+	case "statefulset", "statefulsets":
+		absPath = "/apis/apps/v1"
+		resource = "statefulsets"
+	case "replicationcontroller", "replicationcontrollers":
+		absPath = "/api/v1"
+		resource = "replicationcontrollers"
+	default:
+		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
+	}
+
+	return req.AbsPath(absPath).Namespace(target.namespace).Resource(resource).Name(target.name).SubResource("scale"), nil
 }
