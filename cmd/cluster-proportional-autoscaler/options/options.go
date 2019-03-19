@@ -35,6 +35,7 @@ type AutoScalerConfig struct {
 	DefaultParams     configMapData
 	PollPeriodSeconds int
 	PrintVer          bool
+	NodeLabels        string
 }
 
 // NewAutoScalerConfig returns a Autoscaler config
@@ -121,4 +122,5 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")
 	fs.BoolVar(&c.PrintVer, "version", c.PrintVer, "Print the version and exit.")
 	fs.Var(&c.DefaultParams, "default-params", "Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if ConfigMap is not present.")
+	fs.StringVar(&c.NodeLabels, "nodelabels", c.NodeLabels, "NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.")
 }

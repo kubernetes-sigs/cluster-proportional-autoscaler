@@ -44,7 +44,7 @@ type AutoScaler struct {
 
 // NewAutoScaler returns a new AutoScaler
 func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
-	newK8sClient, err := k8sclient.NewK8sClient(c.Namespace, c.Target)
+	newK8sClient, err := k8sclient.NewK8sClient(c.Namespace, c.Target, c.NodeLabels)
 	if err != nil {
 		return nil, err
 	}
