@@ -62,7 +62,7 @@ type k8sClient struct {
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
-func NewK8sClient(namespace, target string) (K8sClient, error) {
+func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -80,12 +80,14 @@ func NewK8sClient(namespace, target string) (K8sClient, error) {
 	}
 
 	// Start propagating contents of the nodeStore.
+
+	opts := metav1.ListOptions{LabelSelector: nodelabels}
 	nodeListWatch := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return clientset.Core().Nodes().List(options)
+			return clientset.Core().Nodes().List(opts)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return clientset.Core().Nodes().Watch(options)
+			return clientset.Core().Nodes().Watch(opts)
 		},
 	}
 	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)

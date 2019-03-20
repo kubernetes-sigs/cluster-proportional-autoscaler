@@ -26,6 +26,7 @@ Usage of cluster-proportional-autoscaler:
       --v=0: log level for V logs
       --version[=false]: Print the version and exit.
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
+      --nodelabels=: NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.
 ```
 
 ## Examples
@@ -140,3 +141,7 @@ This horizontal cluster proportional autoscaler is a DIY container (because it i
 There is no requirement to run heapster and/or provide CPU resource limits as in HPAs.
 
 The ConfigMap provides the operator with the ability to tune the replica scaling explicitly.
+
+## Using NodeLabels
+
+Nodelabels is an optional param to count only nodes and its cpus where the nodelabels exits. This is useful when nodeselector is used on the target pods controller so its needed to take account only the nodes tagged with the nodeselector labels to calculate the total replicas to scale. When the param is ignored then the cluster proportional autoscaler counts all schedulable nodes and its cpus.
