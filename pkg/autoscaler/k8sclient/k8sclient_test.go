@@ -17,8 +17,8 @@ limitations under the License.
 package k8sclient
 
 import (
-	"testing"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"testing"
 )
 
 func TestGetScaleTarget(t *testing.T) {
