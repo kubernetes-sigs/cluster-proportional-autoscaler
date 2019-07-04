@@ -191,6 +191,11 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 			glog.Errorf("Unexpected object: %#v", nodes[i])
 			continue
 		}
+
+		if skipped := filterSkippedNode(node); skipped {
+			continue
+		}
+
 		tc.Add(node.Status.Capacity[apiv1.ResourceCPU])
 		if !node.Spec.Unschedulable {
 			clusterStatus.SchedulableNodes++
@@ -207,6 +212,19 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	clusterStatus.SchedulableCores = int32(scInt64)
 	k.clusterStatus = clusterStatus
 	return clusterStatus, nil
+}
+
+// filter inappropriate nodes
+func filterSkippedNode(node *apiv1.Node) (skipped bool) {
+	labels := node.GetLabels()
+	for label, value := range labels {
+		// virtual-kubelet node has large amount of capacity which will mislead cluster-proportional-autoscaler
+		if label == "type" && value == "virtual-kubelet" {
+			glog.Infof("Skip virtual-kubelet node: %v", node)
+			return true
+		}
+	}
+	return false
 }
 
 func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err error) {

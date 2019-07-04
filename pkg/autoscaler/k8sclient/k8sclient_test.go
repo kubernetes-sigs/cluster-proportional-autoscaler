@@ -18,6 +18,7 @@ package k8sclient
 
 import (
 	"testing"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func TestGetScaleTarget(t *testing.T) {
@@ -66,4 +67,39 @@ func TestGetScaleTarget(t *testing.T) {
 			t.Errorf("Expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expKind, tc.expName, res.kind, res.name)
 		}
 	}
+}
+
+func TestFilterSkippedNode(t *testing.T) {
+	testCases := []struct {
+		labels     map[string]string
+		expSkipped bool
+	}{
+		{
+			// empty labels
+			map[string]string{},
+			false,
+		},
+		{
+			// standard node
+			map[string]string{
+				"type": "node",
+			},
+			false,
+		},
+		{
+			// virtual node
+			map[string]string{
+				"type": "virtual-kubelet",
+			},
+			true,
+		},
+	}
+	for _, tc := range testCases {
+		node := &apiv1.Node{}
+		node.Labels = tc.labels
+		if skipped := filterSkippedNode(node); skipped != tc.expSkipped {
+			t.Errorf("Expect skipped: %v not skipped: %v\n Labels are %v", tc.expSkipped, skipped, tc.labels)
+		}
+	}
+
 }
