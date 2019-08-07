@@ -47,10 +47,10 @@ func TestControllerParser(t *testing.T) {
 		    }`,
 			false,
 			&linearParams{
-				CoresPerReplica: 2,
-				NodesPerReplica: 1,
-				Min:             1,
-				Max:             100,
+				CoresPerReplica:           2,
+				NodesPerReplica:           1,
+				Min:                       1,
+				Max:                       100,
 				PreventSinglePointFailure: true,
 			},
 		},
@@ -157,10 +157,10 @@ func TestScaleFromSingleParam(t *testing.T) {
 func TestScaleFromMultipleParams(t *testing.T) {
 	testController := &LinearController{}
 	testController.params = &linearParams{
-		CoresPerReplica: 2,
-		NodesPerReplica: 2.5,
-		Min:             1,
-		Max:             100,
+		CoresPerReplica:           2,
+		NodesPerReplica:           2.5,
+		Min:                       1,
+		Max:                       100,
 		PreventSinglePointFailure: true,
 	}
 
