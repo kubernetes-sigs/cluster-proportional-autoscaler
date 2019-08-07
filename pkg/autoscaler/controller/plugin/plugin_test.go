@@ -19,16 +19,16 @@ package plugin
 import (
 	"testing"
 
-	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/api/core/v1"
 )
 
 func TestEnsureController(t *testing.T) {
 	testCases := []struct {
-		configMap *apiv1.ConfigMap
+		configMap *v1.ConfigMap
 		expError  bool
 	}{
 		{
-			&apiv1.ConfigMap{
+			&v1.ConfigMap{
 				Data: map[string]string{
 					"invalidmode": "",
 				},
@@ -36,7 +36,7 @@ func TestEnsureController(t *testing.T) {
 			true,
 		},
 		{
-			&apiv1.ConfigMap{
+			&v1.ConfigMap{
 				Data: map[string]string{
 					"toomanyentries1": "",
 					"toomanyentries2": "",
@@ -45,7 +45,7 @@ func TestEnsureController(t *testing.T) {
 			true,
 		},
 		{
-			&apiv1.ConfigMap{
+			&v1.ConfigMap{
 				Data: map[string]string{
 					"linear": "{\"nodesPerReplica\":1}",
 				},

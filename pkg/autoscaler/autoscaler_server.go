@@ -19,8 +19,8 @@ package autoscaler
 import (
 	"time"
 
-	apiv1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/util/clock"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
@@ -63,7 +63,7 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 // number of replicas, compares them to the actual replicas, and
 // updates the target resource with the expected replicas if necessary.
 func (s *AutoScaler) Run() {
-	ticker := s.clock.Tick(s.pollPeriod)
+	ticker := s.clock.NewTicker(s.pollPeriod)
 	s.readyCh <- struct{}{} // For testing.
 
 	// Don't wait for ticker and execute pollAPIServer() for the first time.
@@ -71,7 +71,7 @@ func (s *AutoScaler) Run() {
 
 	for {
 		select {
-		case <-ticker:
+		case <-ticker.C():
 			s.pollAPIServer()
 		case <-s.stopCh:
 			return
@@ -121,7 +121,7 @@ func (s *AutoScaler) pollAPIServer() {
 	}
 }
 
-func (s *AutoScaler) syncConfigWithServer() (*apiv1.ConfigMap, error) {
+func (s *AutoScaler) syncConfigWithServer() (*v1.ConfigMap, error) {
 	// Fetch autoscaler ConfigMap data from apiserver
 	configMap, err := s.k8sClient.FetchConfigMap(s.k8sClient.GetNamespace(), s.configMapName)
 	if err == nil {
