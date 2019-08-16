@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math"
 
-	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/api/core/v1"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
@@ -55,7 +55,7 @@ type linearParams struct {
 	PreventSinglePointFailure bool    `json:"preventSinglePointFailure"`
 }
 
-func (c *LinearController) SyncConfig(configMap *apiv1.ConfigMap) error {
+func (c *LinearController) SyncConfig(configMap *v1.ConfigMap) error {
 	glog.V(0).Infof("ConfigMap version change (old: %s new: %s) - rebuilding params", c.version, configMap.ObjectMeta.ResourceVersion)
 	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))

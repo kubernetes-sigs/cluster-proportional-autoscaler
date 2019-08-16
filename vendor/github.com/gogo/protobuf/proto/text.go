@@ -51,6 +51,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -508,17 +509,53 @@ func writeRaw(w *textWriter, b []byte) error {
 func (tm *TextMarshaler) writeAny(w *textWriter, v reflect.Value, props *Properties) error {
 	v = reflect.Indirect(v)
 
-	if props != nil && len(props.CustomType) > 0 {
-		custom, ok := v.Interface().(Marshaler)
-		if ok {
-			data, err := custom.Marshal()
+	if props != nil {
+		if len(props.CustomType) > 0 {
+			custom, ok := v.Interface().(Marshaler)
+			if ok {
+				data, err := custom.Marshal()
+				if err != nil {
+					return err
+				}
+				if err := writeString(w, string(data)); err != nil {
+					return err
+				}
+				return nil
+			}
+		} else if len(props.CastType) > 0 {
+			if _, ok := v.Interface().(interface {
+				String() string
+			}); ok {
+				switch v.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+					reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					_, err := fmt.Fprintf(w, "%d", v.Interface())
+					return err
+				}
+			}
+		} else if props.StdTime {
+			t, ok := v.Interface().(time.Time)
+			if !ok {
+				return fmt.Errorf("stdtime is not time.Time, but %T", v.Interface())
+			}
+			tproto, err := timestampProto(t)
 			if err != nil {
 				return err
 			}
-			if err := writeString(w, string(data)); err != nil {
-				return err
+			propsCopy := *props // Make a copy so that this is goroutine-safe
+			propsCopy.StdTime = false
+			err = tm.writeAny(w, reflect.ValueOf(tproto), &propsCopy)
+			return err
+		} else if props.StdDuration {
+			d, ok := v.Interface().(time.Duration)
+			if !ok {
+				return fmt.Errorf("stdtime is not time.Duration, but %T", v.Interface())
 			}
-			return nil
+			dproto := durationProto(d)
+			propsCopy := *props // Make a copy so that this is goroutine-safe
+			propsCopy.StdDuration = false
+			err := tm.writeAny(w, reflect.ValueOf(dproto), &propsCopy)
+			return err
 		}
 	}
 

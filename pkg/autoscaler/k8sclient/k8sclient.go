@@ -21,6 +21,9 @@ import (
 	"strings"
 	"time"
 
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	"k8s.io/api/core/v1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,8 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
-	autoscalingv1 "k8s.io/client-go/pkg/apis/autoscaling/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
@@ -39,11 +40,11 @@ import (
 // K8sClient - Wraps all needed client functionalities for autoscaler
 type K8sClient interface {
 	// FetchConfigMap fetches the requested configmap from the Apiserver
-	FetchConfigMap(namespace, configmap string) (*apiv1.ConfigMap, error)
+	FetchConfigMap(namespace, configmap string) (*v1.ConfigMap, error)
 	// CreateConfigMap creates a configmap with given namespace, name and params
-	CreateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error)
+	CreateConfigMap(namespace, configmap string, params map[string]string) (*v1.ConfigMap, error)
 	// UpdateConfigMap updates a configmap with given namespace, name and params
-	UpdateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error)
+	UpdateConfigMap(namespace, configmap string, params map[string]string) (*v1.ConfigMap, error)
 	// GetClusterStatus counts schedulable nodes and cores in the cluster
 	GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	// GetNamespace returns the namespace of target resource.
@@ -59,6 +60,7 @@ type k8sClient struct {
 	clusterStatus *ClusterStatus
 	nodeStore     cache.Store
 	reflector     *cache.Reflector
+	stopCh        chan struct{}
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
@@ -84,21 +86,23 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 	opts := metav1.ListOptions{LabelSelector: nodelabels}
 	nodeListWatch := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return clientset.Core().Nodes().List(opts)
+			return clientset.CoreV1().Nodes().List(opts)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return clientset.Core().Nodes().Watch(opts)
+			return clientset.CoreV1().Nodes().Watch(opts)
 		},
 	}
 	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
-	reflector := cache.NewReflector(nodeListWatch, &apiv1.Node{}, nodeStore, 0)
-	reflector.Run()
+	reflector := cache.NewReflector(nodeListWatch, &v1.Node{}, nodeStore, 0)
+	stopCh := make(chan struct{})
+	reflector.Run(stopCh)
 
 	return &k8sClient{
 		target:    scaleTarget,
 		clientset: clientset,
 		nodeStore: nodeStore,
 		reflector: reflector,
+		stopCh:    stopCh,
 	}, nil
 }
 
@@ -123,7 +127,7 @@ func (k *k8sClient) GetNamespace() (namespace string) {
 	return k.target.namespace
 }
 
-func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*apiv1.ConfigMap, error) {
+func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*v1.ConfigMap, error) {
 	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Get(configmap, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -131,8 +135,8 @@ func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*apiv1.ConfigMa
 	return cm, nil
 }
 
-func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error) {
-	providedConfigMap := apiv1.ConfigMap{}
+func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*v1.ConfigMap, error) {
+	providedConfigMap := v1.ConfigMap{}
 	providedConfigMap.ObjectMeta.Name = configmap
 	providedConfigMap.ObjectMeta.Namespace = namespace
 	providedConfigMap.Data = params
@@ -144,8 +148,8 @@ func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[stri
 	return cm, nil
 }
 
-func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error) {
-	providedConfigMap := apiv1.ConfigMap{}
+func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*v1.ConfigMap, error) {
+	providedConfigMap := v1.ConfigMap{}
 	providedConfigMap.ObjectMeta.Name = configmap
 	providedConfigMap.ObjectMeta.Namespace = namespace
 	providedConfigMap.Data = params
@@ -186,15 +190,15 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	var tc resource.Quantity
 	var sc resource.Quantity
 	for i := range nodes {
-		node, ok := nodes[i].(*apiv1.Node)
+		node, ok := nodes[i].(*v1.Node)
 		if !ok {
 			glog.Errorf("Unexpected object: %#v", nodes[i])
 			continue
 		}
-		tc.Add(node.Status.Capacity[apiv1.ResourceCPU])
+		tc.Add(node.Status.Capacity[v1.ResourceCPU])
 		if !node.Spec.Unschedulable {
 			clusterStatus.SchedulableNodes++
-			sc.Add(node.Status.Capacity[apiv1.ResourceCPU])
+			sc.Add(node.Status.Capacity[v1.ResourceCPU])
 		}
 	}
 
@@ -217,7 +221,7 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	glog.V(1).Infof("Falling back to extensions/v1beta1, error using apps/v1: %v", err)
 
 	// Fall back to using the extensions API if we get a forbidden error
-	scale, err := k.clientset.Extensions().Scales(k.target.namespace).Get(k.target.kind, k.target.name)
+	scale, err := k.getScaleExtensionsV1beta1(k.target)
 	if err != nil {
 		return 0, err
 	}
@@ -226,7 +230,7 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
 		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
-		_, err = k.clientset.Extensions().Scales(k.target.namespace).Update(k.target.kind, scale)
+		_, err = k.updateScaleExtensionsV1beta1(k.target, scale)
 		if err != nil {
 			return 0, err
 		}
@@ -234,8 +238,31 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	return prevRelicas, nil
 }
 
+func (k *k8sClient) getScaleExtensionsV1beta1(target *scaleTarget) (*extensionsv1beta1.Scale, error) {
+	opt := metav1.GetOptions{}
+	switch strings.ToLower(target.kind) {
+	case "deployment", "deployments":
+		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).GetScale(target.name, opt)
+	case "replicaset", "replicasets":
+		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).GetScale(target.name, opt)
+	default:
+		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
+	}
+}
+
+func (k *k8sClient) updateScaleExtensionsV1beta1(target *scaleTarget, scale *extensionsv1beta1.Scale) (*extensionsv1beta1.Scale, error) {
+	switch strings.ToLower(target.kind) {
+	case "deployment", "deployments":
+		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).UpdateScale(target.name, scale)
+	case "replicaset", "replicasets":
+		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).UpdateScale(target.name, scale)
+	default:
+		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
+	}
+}
+
 func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, err error) {
-	req, err := requestForTarget(k.clientset.Apps().RESTClient().Get(), k.target)
+	req, err := requestForTarget(k.clientset.AppsV1().RESTClient().Get(), k.target)
 	if err != nil {
 		return 0, err
 	}
@@ -250,7 +277,7 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, 
 		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
 		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
-		req, err = requestForTarget(k.clientset.Apps().RESTClient().Put(), k.target)
+		req, err = requestForTarget(k.clientset.AppsV1().RESTClient().Put(), k.target)
 		if err != nil {
 			return 0, err
 		}

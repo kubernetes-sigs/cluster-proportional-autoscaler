@@ -19,7 +19,7 @@ package k8sclient
 import (
 	"fmt"
 
-	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/api/core/v1"
 )
 
 var _ = K8sClient(&MockK8sClient{})
@@ -29,11 +29,11 @@ type MockK8sClient struct {
 	NumOfNodes    int
 	NumOfCores    int
 	NumOfReplicas int
-	ConfigMap     *apiv1.ConfigMap
+	ConfigMap     *v1.ConfigMap
 }
 
 // FetchConfigMap mocks fetching the requested configmap from the Apiserver
-func (k *MockK8sClient) FetchConfigMap(namespace, configmap string) (*apiv1.ConfigMap, error) {
+func (k *MockK8sClient) FetchConfigMap(namespace, configmap string) (*v1.ConfigMap, error) {
 	if k.ConfigMap.ObjectMeta.ResourceVersion == "" {
 		return nil, fmt.Errorf("config map not exist")
 	}
@@ -41,12 +41,12 @@ func (k *MockK8sClient) FetchConfigMap(namespace, configmap string) (*apiv1.Conf
 }
 
 // CreateConfigMap mocks creating a configmap with given namespace, name and params
-func (k *MockK8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error) {
+func (k *MockK8sClient) CreateConfigMap(namespace, configmap string, params map[string]string) (*v1.ConfigMap, error) {
 	return nil, nil
 }
 
 // UpdateConfigMap mocks updating a configmap with given namespace, name and params
-func (k *MockK8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*apiv1.ConfigMap, error) {
+func (k *MockK8sClient) UpdateConfigMap(namespace, configmap string, params map[string]string) (*v1.ConfigMap, error) {
 	return nil, nil
 }
 

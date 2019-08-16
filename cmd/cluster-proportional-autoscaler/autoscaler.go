@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	"k8s.io/apiserver/pkg/util/flag"
+	"k8s.io/component-base/cli/flag"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler"

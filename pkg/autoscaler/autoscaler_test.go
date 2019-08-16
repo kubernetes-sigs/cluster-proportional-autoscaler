@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
@@ -30,7 +30,7 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	testConfigMap := apiv1.ConfigMap{
+	testConfigMap := v1.ConfigMap{
 		Data: make(map[string]string),
 	}
 	testConfigMap.ObjectMeta.ResourceVersion = `1`

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sort"
 
-	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/api/core/v1"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
@@ -68,7 +68,7 @@ type ladderParams struct {
 	NodesToReplicas paramEntries `json:"nodesToReplicas"`
 }
 
-func (c *LadderController) SyncConfig(configMap *apiv1.ConfigMap) error {
+func (c *LadderController) SyncConfig(configMap *v1.ConfigMap) error {
 	glog.V(0).Infof("Detected ConfigMap version change (old: %s new: %s) - rebuilding lookup entries", c.version, configMap.ObjectMeta.ResourceVersion)
 	glog.V(2).Infof("Params from apiserver: \n%v", configMap.Data[ControllerType])
 	params, err := parseParams([]byte(configMap.Data[ControllerType]))
