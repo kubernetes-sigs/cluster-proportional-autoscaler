@@ -18,6 +18,9 @@ metadata:
   name: nginx-autoscale-example
   namespace: default
 spec:
+  selector:
+    matchLabels:
+      run: nginx-autoscale-example
   replicas: 1
   template:
     metadata:
@@ -38,6 +41,9 @@ metadata:
   labels:
     app: autoscaler
 spec:
+  selector:
+    matchLabels:
+      app: autoscaler
   replicas: 1
   template:
     metadata:
