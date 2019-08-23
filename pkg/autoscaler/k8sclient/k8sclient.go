@@ -95,7 +95,7 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
 	reflector := cache.NewReflector(nodeListWatch, &v1.Node{}, nodeStore, 0)
 	stopCh := make(chan struct{})
-	reflector.Run(stopCh)
+	go reflector.Run(stopCh)
 
 	return &k8sClient{
 		target:    scaleTarget,
