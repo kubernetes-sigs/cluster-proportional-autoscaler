@@ -25,7 +25,7 @@ REGISTRY ?= staging-k8s.gcr.io
 ARCH ?= amd64
 
 # This version-strategy uses git tags to set the version string
-VERSION := $(shell git describe --tags --always --dirty)
+VERSION := $(shell git describe --abbrev=0 --tags)
 
 ###
 ### These variables should not need tweaking.
