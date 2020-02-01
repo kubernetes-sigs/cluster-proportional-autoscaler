@@ -68,11 +68,6 @@ func TestControllerParser(t *testing.T) {
 			true,
 			&ladderParams{},
 		},
-		{ // Invalid value 0 in list
-			`{ "coresToReplicas" :  [[ 0, 1]] }`,
-			true,
-			&ladderParams{},
-		},
 		{ // Invalid negative in list
 			`{ "coresToReplicas" : [[:-200]] }`,
 			true,
@@ -82,7 +77,8 @@ func TestControllerParser(t *testing.T) {
 			`{
 				"coresToReplicas":
 				[
-					[1, 1],
+					[0, 0],
+					[1, 0],
 					[2, 2],
 					[3, 3],
 					[512, 5],
@@ -102,7 +98,8 @@ func TestControllerParser(t *testing.T) {
 			false,
 			&ladderParams{
 				CoresToReplicas: []paramEntry{
-					{1, 1},
+					{0, 0},
+					{1, 0},
 					{2, 2},
 					{3, 3},
 					{512, 5},
@@ -266,6 +263,38 @@ func TestControllerScaler(t *testing.T) {
 
 	for _, tc := range testCases {
 		if replicas := getExpectedReplicasFromEntries(tc.numResources, testEntries); tc.expReplicas != replicas {
+			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+		}
+	}
+}
+
+func TestControllerScalerFromZero(t *testing.T) {
+	testEntries := []paramEntry{
+		{0, 0},
+		{3, 3},
+	}
+
+	testEntriesFromOne := []paramEntry{
+		{1, 0},
+		{3, 3},
+	}
+
+	testCases := []struct {
+		numResources int
+		expReplicas  int
+	}{
+		{0, 0},
+		{1, 0},
+		{2, 0},
+		{3, 3},
+		{4, 3},
+	}
+
+	for _, tc := range testCases {
+		if replicas := getExpectedReplicasFromEntries(tc.numResources, testEntries); tc.expReplicas != replicas {
+			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+		}
+		if replicas := getExpectedReplicasFromEntries(tc.numResources, testEntriesFromOne); tc.expReplicas != replicas {
 			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
 		}
 	}

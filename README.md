@@ -131,7 +131,7 @@ And we would choose the larger one `3`.
 Either one of the `coresToReplicas` or `nodesToReplicas` could be omitted. All elements in them should
 be int.
 
-The lowest number of replicas is set to 1.
+The lowest number of replicas is set to 0.
 
 ## Comparisons to the Horizontal Pod Autoscaler feature
 

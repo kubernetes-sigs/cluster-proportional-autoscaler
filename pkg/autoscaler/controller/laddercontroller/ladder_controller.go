@@ -92,7 +92,7 @@ func parseParams(data []byte) (*ladderParams, error) {
 		if len(e) != 2 {
 			return nil, fmt.Errorf("invalid element %v in cores_to_replicas_map", e)
 		}
-		if e[0] < 1 || e[1] < 1 {
+		if e[0] < 0 || e[1] < 0 {
 			return nil, fmt.Errorf("invalid negative values in entry %v in cores_to_replicas_map", e)
 		}
 	}
@@ -100,7 +100,7 @@ func parseParams(data []byte) (*ladderParams, error) {
 		if len(e) != 2 {
 			return nil, fmt.Errorf("invalid element %b in nodes_to_replicas_map", e)
 		}
-		if e[0] < 1 || e[1] < 1 {
+		if e[0] < 0 || e[1] < 0 {
 			return nil, fmt.Errorf("invalid negative values in entry %v in nodes_to_replicas_map", e)
 		}
 	}
