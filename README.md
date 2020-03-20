@@ -27,6 +27,7 @@ Usage of cluster-proportional-autoscaler:
       --version[=false]: Print the version and exit.
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
       --nodelabels=: NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.
+      --max-sync-failures=[0]: Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.
 ```
 
 ## Examples
