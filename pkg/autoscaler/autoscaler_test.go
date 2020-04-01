@@ -17,10 +17,11 @@ limitations under the License.
 package autoscaler
 
 import (
+	"errors"
 	"testing"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -71,13 +72,15 @@ func TestRun(t *testing.T) {
 	fakePollPeriod := 5 * time.Second
 	fakeConfigMapName := "fake-cluster-proportional-autoscaler-params"
 	autoScaler := &AutoScaler{
-		k8sClient:     &mockK8s,
-		controller:    laddercontroller.NewLadderController(),
-		clock:         fakeClock,
-		pollPeriod:    fakePollPeriod,
-		configMapName: fakeConfigMapName,
-		stopCh:        make(chan struct{}),
-		readyCh:       make(chan<- struct{}, 1),
+		k8sClient:           &mockK8s,
+		controller:          laddercontroller.NewLadderController(),
+		clock:               fakeClock,
+		pollPeriod:          fakePollPeriod,
+		configMapName:       fakeConfigMapName,
+		stopCh:              make(chan struct{}),
+		readyCh:             make(chan<- struct{}, 1),
+		lastPollCycleHealth: newHealthInfo(),
+		healthServer:        mockHealthServer{},
 	}
 
 	go autoScaler.Run()
@@ -203,6 +206,56 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestRun_MaxRetries(t *testing.T) {
+	const maxRetries = 3
+	mockK8s := k8sclient.MockK8sClient{
+		NumOfNodes:    0,
+		NumOfCores:    0,
+		NumOfReplicas: 0,
+		FetchConfigMapFn: func(namespace, configmap string) (*v1.ConfigMap, error) {
+			return nil, errors.New("mocked error")
+		},
+	}
+	var exitFnCalled bool
+	fakeClock := clock.NewFakeClock(time.Now())
+	fakePollPeriod := 5 * time.Second
+	fakeConfigMapName := "fake-cluster-proportional-autoscaler-params"
+	readyCh := make(chan struct{})
+	stopCh := make(chan struct{})
+	autoScaler := &AutoScaler{
+		k8sClient:           &mockK8s,
+		controller:          laddercontroller.NewLadderController(),
+		clock:               fakeClock,
+		pollPeriod:          fakePollPeriod,
+		configMapName:       fakeConfigMapName,
+		stopCh:              stopCh,
+		readyCh:             readyCh,
+		lastPollCycleHealth: newHealthInfo(),
+		maxSyncFailures:     maxRetries,
+		exitFn: func() {
+			exitFnCalled = true
+			// shutdown autoScaler via stopCh to stop
+			close(stopCh)
+		},
+		healthServer: mockHealthServer{},
+	}
+	go autoScaler.Run()
+	<-readyCh
+	for i := 0; i < maxRetries; i++ {
+		fakeClock.Step(fakePollPeriod)
+		wait.Poll(50*time.Millisecond, 3*time.Second, func() (done bool, err error) {
+			return true, nil
+		})
+	}
+
+	if !exitFnCalled {
+		t.Fatalf("Did not exit")
+	}
+	if autoScaler.lastPollCycleHealth.failedCount > autoScaler.maxSyncFailures {
+		t.Fatalf("scaler ran more times than allowed")
+	}
+}
+
 func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient, replicas int) error {
 	return wait.Poll(50*time.Millisecond, 3*time.Second, func() (done bool, err error) {
 		if mockK8s.NumOfReplicas != replicas {
@@ -211,4 +264,10 @@ func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient
 		}
 		return true, nil
 	})
+}
+
+type mockHealthServer struct {
+}
+
+func (s mockHealthServer) Start() {
 }

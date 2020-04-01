@@ -17,9 +17,10 @@ limitations under the License.
 package autoscaler
 
 import (
+	"os"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/clock"
 
 	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
@@ -32,14 +33,18 @@ import (
 
 // AutoScaler determines the number of replicas to run
 type AutoScaler struct {
-	k8sClient     k8sclient.K8sClient
-	controller    controller.Controller
-	configMapName string
-	defaultParams map[string]string
-	pollPeriod    time.Duration
-	clock         clock.Clock
-	stopCh        chan struct{}
-	readyCh       chan<- struct{} // For testing.
+	k8sClient           k8sclient.K8sClient
+	controller          controller.Controller
+	configMapName       string
+	defaultParams       map[string]string
+	pollPeriod          time.Duration
+	clock               clock.Clock
+	stopCh              chan struct{}
+	readyCh             chan<- struct{} // For testing.
+	healthServer        HealthServer
+	lastPollCycleHealth *healthInfo
+	maxSyncFailures     int
+	exitFn              func()
 }
 
 // NewAutoScaler returns a new AutoScaler
@@ -48,14 +53,20 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	if err != nil {
 		return nil, err
 	}
+	healthInfo := newHealthInfo()
+	healthServer := httpHealthServer{lastPollCycleHealth: healthInfo}
 	return &AutoScaler{
-		k8sClient:     newK8sClient,
-		configMapName: c.ConfigMap,
-		defaultParams: c.DefaultParams,
-		pollPeriod:    time.Second * time.Duration(c.PollPeriodSeconds),
-		clock:         clock.RealClock{},
-		stopCh:        make(chan struct{}),
-		readyCh:       make(chan struct{}, 1),
+		k8sClient:           newK8sClient,
+		configMapName:       c.ConfigMap,
+		defaultParams:       c.DefaultParams,
+		pollPeriod:          time.Second * time.Duration(c.PollPeriodSeconds),
+		clock:               clock.RealClock{},
+		stopCh:              make(chan struct{}),
+		readyCh:             make(chan struct{}, 1),
+		lastPollCycleHealth: healthInfo,
+		healthServer:        &healthServer,
+		maxSyncFailures:     c.MaxSyncFailures,
+		exitFn:              func() { os.Exit(1) },
 	}, nil
 }
 
@@ -66,25 +77,36 @@ func (s *AutoScaler) Run() {
 	ticker := s.clock.NewTicker(s.pollPeriod)
 	s.readyCh <- struct{}{} // For testing.
 
+	go s.healthServer.Start()
 	// Don't wait for ticker and execute pollAPIServer() for the first time.
-	s.pollAPIServer()
+	s.tryPollAPIServer()
 
 	for {
 		select {
 		case <-ticker.C():
-			s.pollAPIServer()
+			s.tryPollAPIServer()
 		case <-s.stopCh:
 			return
 		}
 	}
 }
 
-func (s *AutoScaler) pollAPIServer() {
+func (s *AutoScaler) tryPollAPIServer() {
+	err := s.pollAPIServer()
+	attempts := s.lastPollCycleHealth.setLastPollError(err)
+	// if we've tried polling the apiserver more times than allowed
+	if s.maxSyncFailures > 0 && attempts == s.maxSyncFailures {
+		glog.Errorf("Maximum number of api server polling attempts (%d) have been reached. Exiting application.", s.maxSyncFailures)
+		s.exitFn()
+	}
+}
+
+func (s *AutoScaler) pollAPIServer() error {
 	// Query the apiserver for the cluster status --- number of nodes and cores
 	clusterStatus, err := s.k8sClient.GetClusterStatus()
 	if err != nil {
 		glog.Errorf("Error while getting cluster status: %v", err)
-		return
+		return err
 	}
 	glog.V(4).Infof("Total nodes %5d, schedulable nodes: %5d", clusterStatus.TotalNodes, clusterStatus.SchedulableNodes)
 	glog.V(4).Infof("Total cores %5d, schedulable cores: %5d", clusterStatus.TotalCores, clusterStatus.SchedulableCores)
@@ -93,7 +115,7 @@ func (s *AutoScaler) pollAPIServer() {
 	configMap, err := s.syncConfigWithServer()
 	if err != nil || configMap == nil {
 		glog.Errorf("Error syncing configMap with apiserver: %v", err)
-		return
+		return err
 	}
 
 	// Only sync updated ConfigMap or before controller is set.
@@ -102,7 +124,7 @@ func (s *AutoScaler) pollAPIServer() {
 		s.controller, err = plugin.EnsureController(s.controller, configMap)
 		if err != nil || s.controller == nil {
 			glog.Errorf("Error ensuring controller: %v", err)
-			return
+			return err
 		}
 	}
 
@@ -110,7 +132,7 @@ func (s *AutoScaler) pollAPIServer() {
 	expReplicas, err := s.controller.GetExpectedReplicas(clusterStatus)
 	if err != nil {
 		glog.Errorf("Error calculating expected replicas number: %v", err)
-		return
+		return err
 	}
 	glog.V(4).Infof("Expected replica count: %3d", expReplicas)
 
@@ -119,6 +141,7 @@ func (s *AutoScaler) pollAPIServer() {
 	if err != nil {
 		glog.Errorf("Update failure: %s", err)
 	}
+	return err
 }
 
 func (s *AutoScaler) syncConfigWithServer() (*v1.ConfigMap, error) {
@@ -127,6 +150,7 @@ func (s *AutoScaler) syncConfigWithServer() (*v1.ConfigMap, error) {
 	if err == nil {
 		return configMap, nil
 	}
+
 	if s.defaultParams == nil {
 		return nil, err
 	}
