@@ -123,15 +123,30 @@ The ladder controller gives out the desired replicas count by using a step funct
 The step ladder function uses the datapoint for core and node scaling from the ConfigMap.
 The lookup which yields the higher number of replicas will be used as the target scaling number.
 
-For instance, given a cluster comes with `100` nodes and `400` cores and it is using above ConfigMap.  
-The replicas derived from "cores_to_replicas_map" would be `3` (because `64` < `400` < `512`).  
-The replicas derived from "nodes_to_replicas_map" would be `2` (because `100` > `2`).   
+For instance, given a cluster comes with `100` nodes and `400` cores and it is using above ConfigMap.
+The replicas derived from "cores_to_replicas_map" would be `3` (because `64` < `400` < `512`).
+The replicas derived from "nodes_to_replicas_map" would be `2` (because `100` > `2`).
 And we would choose the larger one `3`.
 
 Either one of the `coresToReplicas` or `nodesToReplicas` could be omitted. All elements in them should
 be int.
 
-The lowest number of replicas is set to 0.
+Replicas can be set to 0 (unlike in linear mode).
+
+Scaling to 0 replicas could be used to enable optional features as a cluster grows. For example, this
+ladder would create a single replica once the cluster reaches six nodes.
+
+```
+data:
+  ladder: |-
+    {
+      "nodesToReplicas":
+      [
+        [ 0, 0 ],
+        [ 6, 1 ]
+      ]
+    }
+```
 
 ## Comparisons to the Horizontal Pod Autoscaler feature
 
