@@ -53,6 +53,7 @@ type linearParams struct {
 	Min                       int     `json:"min"`
 	Max                       int     `json:"max"`
 	PreventSinglePointFailure bool    `json:"preventSinglePointFailure"`
+	IncludeUnschedulableNodes bool    `json:"includeUnschedulableNodes"`
 }
 
 func (c *LinearController) SyncConfig(configMap *v1.ConfigMap) error {
@@ -99,19 +100,25 @@ func (c *LinearController) GetParamsVersion() string {
 }
 
 func (c *LinearController) GetExpectedReplicas(status *k8sclient.ClusterStatus) (int32, error) {
-	// Get the expected replicas for the currently schedulable nodes and cores
-	expReplicas := int32(c.getExpectedReplicasFromParams(int(status.SchedulableNodes), int(status.SchedulableCores)))
+	// Get the expected replicas for the currently number of nodes and cores
+	expReplicas := int32(c.getExpectedReplicasFromParams(int(status.SchedulableNodes), int(status.SchedulableCores), int(status.TotalNodes), int(status.TotalCores)))
 
 	return expReplicas, nil
 }
 
-func (c *LinearController) getExpectedReplicasFromParams(schedulableNodes, schedulableCores int) int {
-	replicasFromCore := c.getExpectedReplicasFromParam(schedulableCores, c.params.CoresPerReplica)
-	replicasFromNode := c.getExpectedReplicasFromParam(schedulableNodes, c.params.NodesPerReplica)
+func (c *LinearController) getExpectedReplicasFromParams(schedulableNodes, schedulableCores, totalNodes, totalCores int) int {
+	nodes := schedulableNodes
+	cores := schedulableCores
+	if c.params.IncludeUnschedulableNodes {
+		nodes = totalNodes
+		cores = totalCores
+	}
+	replicasFromCore := c.getExpectedReplicasFromParam(cores, c.params.CoresPerReplica)
+	replicasFromNode := c.getExpectedReplicasFromParam(nodes, c.params.NodesPerReplica)
 	// Prevent single point of failure by having at least 2 replicas when
 	// there are more than one node.
 	if c.params.PreventSinglePointFailure &&
-		schedulableNodes > 1 &&
+		nodes > 1 &&
 		replicasFromNode < 2 {
 		replicasFromNode = 2
 	}

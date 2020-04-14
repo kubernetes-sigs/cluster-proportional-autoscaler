@@ -227,7 +227,7 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	}
 	prevRelicas = scale.Spec.Replicas
 	if expReplicas != prevRelicas {
-		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
+		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.TotalNodes, k.clusterStatus.SchedulableCores, k.clusterStatus.TotalCores)
 		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
 		_, err = k.updateScaleExtensionsV1beta1(k.target, scale)

@@ -43,7 +43,8 @@ func TestControllerParser(t *testing.T) {
 		      "nodesPerReplica": 1,
 		      "min": 1,
 		      "max": 100,
-		      "preventSinglePointFailure": true
+		      "preventSinglePointFailure": true,
+		      "includeUnschedulableNodes": true
 		    }`,
 			false,
 			&linearParams{
@@ -52,6 +53,25 @@ func TestControllerParser(t *testing.T) {
 				Min:                       1,
 				Max:                       100,
 				PreventSinglePointFailure: true,
+				IncludeUnschedulableNodes: true,
+			},
+		},
+		// IncludeUnschedulableNodes must default to false for backwards compatibility.
+		{
+			`{
+		      "coresPerReplica": 2,
+		      "nodesPerReplica": 1,
+		      "min": 1,
+		      "max": 100,
+		    }`,
+			true,
+			&linearParams{
+				CoresPerReplica:           2,
+				NodesPerReplica:           1,
+				Min:                       1,
+				Max:                       100,
+				PreventSinglePointFailure: true,
+				IncludeUnschedulableNodes: false,
 			},
 		},
 		{ // Invalid JSON
@@ -70,7 +90,7 @@ func TestControllerParser(t *testing.T) {
 			&linearParams{},
 		},
 		{ // Invalid max that smaller tham min
-			`{ 
+			`{
 		      "nodesPerReplica": 1,
 		      "min": 100,
 		      "max": 50
@@ -79,7 +99,7 @@ func TestControllerParser(t *testing.T) {
 			&linearParams{},
 		},
 		{ // Both coresPerReplica and nodesPerReplica are unset
-			`{ 
+			`{
 		      "min": 1,
 		      "max": 100
 		    }`,
@@ -94,6 +114,18 @@ func TestControllerParser(t *testing.T) {
 		      "min": 1,
 		      "max": 100,
 		      "preventSinglePointFailure": invalid,
+		    }`,
+			true,
+			&linearParams{},
+		},
+		// Wrong input for IncludeUnschedulableNodes.
+		{
+			`{
+		      "coresPerReplica": 2,
+		      "nodesPerReplica": 1,
+		      "min": 1,
+		      "max": 100,
+		      "includeUnschedulableNodes": invalid,
 		    }`,
 			true,
 			&linearParams{},
@@ -162,6 +194,7 @@ func TestScaleFromMultipleParams(t *testing.T) {
 		Min:                       1,
 		Max:                       100,
 		PreventSinglePointFailure: true,
+		IncludeUnschedulableNodes: false,
 	}
 
 	testCases := []struct {
@@ -187,8 +220,43 @@ func TestScaleFromMultipleParams(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if replicas := testController.getExpectedReplicasFromParams(tc.numNodes, tc.numCores); tc.expReplicas != replicas {
-			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+		if replicas := testController.getExpectedReplicasFromParams(tc.numNodes, tc.numCores, tc.numNodes, tc.numNodes); tc.expReplicas != replicas {
+			t.Errorf("Scaler Lookup failed for case %v: Expected %d, Got %d", tc, tc.expReplicas, replicas)
+		}
+	}
+}
+
+func TestScaleFromUnschedulableNodes(t *testing.T) {
+	testController := &LinearController{}
+	testController.params = &linearParams{
+		CoresPerReplica:           2,
+		NodesPerReplica:           2,
+		Min:                       1,
+		Max:                       100,
+		PreventSinglePointFailure: true,
+		IncludeUnschedulableNodes: true,
+	}
+
+	testCases := []struct {
+		numSchedulableCores int
+		numSchedulableNodes int
+		numCores            int
+		numNodes            int
+		expReplicas         int
+	}{
+		{0, 0, 0, 0, 1},
+		{1, 1, 1, 1, 1},
+		{2, 2, 2, 2, 2},
+		{4, 4, 4, 4, 2},
+		{2, 2, 4, 4, 2},
+		{8, 8, 8, 8, 4},
+		{6, 6, 8, 8, 4},
+		{21, 21, 210, 210, 100},
+	}
+
+	for _, tc := range testCases {
+		if replicas := testController.getExpectedReplicasFromParams(tc.numSchedulableNodes, tc.numSchedulableCores, tc.numNodes, tc.numNodes); tc.expReplicas != replicas {
+			t.Errorf("Scaler Lookup failed for case %v: Expected %d, Got %d", tc, tc.expReplicas, replicas)
 		}
 	}
 }
