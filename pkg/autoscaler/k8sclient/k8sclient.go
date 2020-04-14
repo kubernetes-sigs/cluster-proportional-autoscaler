@@ -195,10 +195,10 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 			glog.Errorf("Unexpected object: %#v", nodes[i])
 			continue
 		}
-		tc.Add(node.Status.Capacity[v1.ResourceCPU])
+		tc.Add(node.Status.Allocatable[v1.ResourceCPU])
 		if !node.Spec.Unschedulable {
 			clusterStatus.SchedulableNodes++
-			sc.Add(node.Status.Capacity[v1.ResourceCPU])
+			sc.Add(node.Status.Allocatable[v1.ResourceCPU])
 		}
 	}
 
