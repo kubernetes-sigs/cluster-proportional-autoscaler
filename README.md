@@ -70,6 +70,7 @@ data:
       "min": 1,
       "max": 100,
       "preventSinglePointFailure": true
+      "includeUnschedulableNodes": true
     }
 ```
 
@@ -87,9 +88,13 @@ For instance, given a cluster has 4 nodes and 13 cores. With above parameters, e
 So we need `4 / 1 = 4` replicas to take care of all 4 nodes. And each replica could take care of 2 cores. We need `ceil(13 / 2) = 7`
 replicas to take care of all 13 cores. Controller will choose the greater one, which is `7` here, as the result.
 
-Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max` and
-`preventSinglePointFailure` is optional. If not set, `min` would be default to `1`,
-`preventSinglePointFailure` will be default to `false`.
+When `includeUnschedulableNodes` is set to `true`, the replicas will scale based on the total number of nodes.
+Otherwise, the replicas will only scale based on the number of schedulable nodes (i.e., cordoned and draining nodes are
+excluded.) 
+
+Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max`, 
+`preventSinglePointFailure` and `includeUnscheduleableNodes` are optional. If not set, `min` would be default to `1`,
+`preventSinglePointFailure` will be default to `false` and `includeUnschedulableNodes` will be default to `false`.
 
 Side notes:
 - Both `coresPerReplica` and `nodesPerReplica` are float.
