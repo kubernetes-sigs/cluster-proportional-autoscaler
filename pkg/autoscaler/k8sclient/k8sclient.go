@@ -202,13 +202,8 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 		}
 	}
 
-	tcInt64, tcOk := tc.AsInt64()
-	scInt64, scOk := sc.AsInt64()
-	if !tcOk || !scOk {
-		return nil, fmt.Errorf("unable to compute integer values of schedulable cores in the cluster")
-	}
-	clusterStatus.TotalCores = int32(tcInt64)
-	clusterStatus.SchedulableCores = int32(scInt64)
+	clusterStatus.TotalCores = int32(tc.Value())
+	clusterStatus.SchedulableCores = int32(sc.Value())
 	k.clusterStatus = clusterStatus
 	return clusterStatus, nil
 }
