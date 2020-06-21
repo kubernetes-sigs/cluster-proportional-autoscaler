@@ -39,6 +39,8 @@ IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
 
 BUILD_IMAGE ?= golang:1.12.7-alpine
 
+MULTIARCH_IMAGE := $(REGISTRY)/$(BIN)
+
 # If you want to build all binaries, see the 'all-build' rule.
 # If you want to build all containers, see the 'all-container' rule.
 # If you want to build AND push all containers, see the 'all-push' rule.
@@ -57,7 +59,7 @@ all-build: $(addprefix build-, $(ALL_ARCH))
 
 all-container: $(addprefix container-, $(ALL_ARCH))
 
-all-push: $(addprefix push-, $(ALL_ARCH))
+arch-push: $(addprefix push-, $(ALL_ARCH))
 
 build: bin/$(ARCH)/$(BIN)
 
@@ -101,6 +103,12 @@ push: .push-$(DOTFILE_IMAGE) push-name
 
 push-name:
 	@echo "pushed: $(IMAGE):$(VERSION)"
+
+multiarch-container: arch-push
+	docker manifest create $(MULTIARCH_IMAGE):$(VERSION) $(addprefix --amend $(REGISTRY)/$(BIN)-, $(addsuffix :$(VERSION), $(ALL_ARCH)))
+
+all-push: multiarch-container
+	@gcloud docker -- manifest push $(MULTIARCH_IMAGE):$(VERSION)
 
 version:
 	@echo $(VERSION)
