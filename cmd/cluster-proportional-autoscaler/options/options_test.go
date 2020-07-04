@@ -44,7 +44,19 @@ func TestIsTargetFormatValid(t *testing.T) {
 		},
 		{
 			"deployments/anything",
-			false,
+			true,
+		},
+		{
+			"deployments.v1.apps/anything",
+			true,
+		},
+		{
+			"scalecrd.v1.example/anything",
+			true,
+		},
+		{
+			"scalecrd.example/anything",
+			true,
 		},
 		{
 			"noexist/anything",
@@ -52,6 +64,18 @@ func TestIsTargetFormatValid(t *testing.T) {
 		},
 		{
 			"deployment",
+			false,
+		},
+		{
+			"scalecrd.v1.example",
+			false,
+		},
+		{
+			"scalecrd.v1.example.what/anything",
+			false,
+		},
+		{
+			"scalecrd.v1.example/anything/what",
 			false,
 		},
 	}

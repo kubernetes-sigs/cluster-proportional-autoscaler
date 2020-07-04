@@ -17,37 +17,52 @@ limitations under the License.
 package k8sclient
 
 import (
+	"reflect"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestGetScaleTarget(t *testing.T) {
 	testCases := []struct {
-		target   string
-		expKind  string
-		expName  string
-		expError bool
+		target        string
+		expectedGroup *schema.GroupResource
+		expName       string
+		expError      bool
 	}{
 		{
 			"deployment/anything",
-			"deployment",
+			&schema.GroupResource{Group: "apps", Resource: "deployments"},
 			"anything",
 			false,
 		},
 		{
 			"replicationcontroller/anotherthing",
-			"replicationcontroller",
+			&schema.GroupResource{Group: "", Resource: "replicationcontrollers"},
 			"anotherthing",
 			false,
 		},
 		{
+			"scalecrd.v1.example/anything",
+			&schema.GroupResource{Group: "example", Resource: "scalecrd"},
+			"anything",
+			false,
+		},
+		{
+			"scalecrd.example/anything",
+			&schema.GroupResource{Group: "example", Resource: "scalecrd"},
+			"anything",
+			false,
+		},
+		{
 			"replicationcontroller",
-			"",
+			nil,
 			"",
 			true,
 		},
 		{
 			"replicaset/anything/what",
-			"",
+			nil,
 			"",
 			true,
 		},
@@ -62,8 +77,8 @@ func TestGetScaleTarget(t *testing.T) {
 			t.Errorf("Expect error, got no error for target: %v", tc.target)
 			continue
 		}
-		if res.kind != tc.expKind || res.name != tc.expName {
-			t.Errorf("Expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expKind, tc.expName, res.kind, res.name)
+		if !reflect.DeepEqual(res.groupResource, tc.expectedGroup) || res.name != tc.expName {
+			t.Errorf("Expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expectedGroup, tc.expName, res.groupResource, res.name)
 		}
 	}
 }

@@ -23,15 +23,19 @@ import (
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/api/core/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/discovery"
+	cacheddiscovery "k8s.io/client-go/discovery/cached/memory"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
+	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/golang/glog"
@@ -55,12 +59,13 @@ type K8sClient interface {
 
 // k8sClient - Wraps all Kubernetes API client functionalities
 type k8sClient struct {
-	target        *scaleTarget
-	clientset     *kubernetes.Clientset
-	clusterStatus *ClusterStatus
-	nodeStore     cache.Store
-	reflector     *cache.Reflector
-	stopCh        chan struct{}
+	target          *scaleTarget
+	clientset       *kubernetes.Clientset
+	clusterStatus   *ClusterStatus
+	nodeStore       cache.Store
+	reflector       *cache.Reflector
+	scaleNamespacer scale.ScalesGetter
+	stopCh          chan struct{}
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
@@ -70,6 +75,7 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 		return nil, err
 	}
 	// Use protobufs for communication with apiserver.
+	config.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
 	config.ContentType = "application/vnd.kubernetes.protobuf"
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -81,8 +87,28 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 		return nil, err
 	}
 
-	// Start propagating contents of the nodeStore.
+	restClient := clientset.RESTClient()
+	discoveryClient := discovery.NewDiscoveryClient(restClient)
 
+	// Informers don't seem to do a good job logging error messages when it
+	// can't reach the server, making debugging hard. This makes it easier to
+	// figure out if apiserver is configured incorrectly.
+	glog.Infof("Testing communication with server")
+	v, err := discoveryClient.ServerVersion()
+	if err != nil {
+		glog.Errorf("error while trying to communicate with apiserver: %s", err.Error())
+		return nil, err
+	}
+	glog.Infof("Running with Kubernetes cluster version: v%s.%s. git version: %s. git tree state: %s. commit: %s. platform: %s",
+		v.Major, v.Minor, v.GitVersion, v.GitTreeState, v.GitCommit, v.Platform)
+	glog.Infof("Communication with server successful")
+
+	resolver := scale.NewDiscoveryScaleKindResolver(discoveryClient)
+	cachedDiscoveryClient := cacheddiscovery.NewMemCacheClient(discoveryClient)
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(cachedDiscoveryClient)
+	scaleNamespacer := scale.New(restClient, mapper, dynamic.LegacyAPIPathResolverFunc, resolver)
+
+	// Start propagating contents of the nodeStore.
 	opts := metav1.ListOptions{LabelSelector: nodelabels}
 	nodeListWatch := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -98,29 +124,48 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 	go reflector.Run(stopCh)
 
 	return &k8sClient{
-		target:    scaleTarget,
-		clientset: clientset,
-		nodeStore: nodeStore,
-		reflector: reflector,
-		stopCh:    stopCh,
+		target:          scaleTarget,
+		clientset:       clientset,
+		nodeStore:       nodeStore,
+		reflector:       reflector,
+		scaleNamespacer: scaleNamespacer,
+		stopCh:          stopCh,
 	}, nil
 }
 
 func getScaleTarget(target, namespace string) (*scaleTarget, error) {
+
 	splits := strings.Split(target, "/")
 	if len(splits) != 2 {
 		return &scaleTarget{}, fmt.Errorf("target format error: %v", target)
 	}
-	kind := splits[0]
+	resourceArg := splits[0]
 	name := splits[1]
-	return &scaleTarget{kind, name, namespace}, nil
+
+	// check for apps resources without group set
+	switch resourceArg {
+	case "replicaset", "replicasets":
+		resourceArg = "replicasets.apps"
+	case "deployment", "deployments":
+		resourceArg = "deployments.apps"
+	case "statefulset", "statefulsets":
+		resourceArg = "statefulsets.apps"
+	case "replicationcontroller", "replicationcontrollers":
+		resourceArg = "replicationcontrollers"
+	}
+
+	gvr, groupResource := schema.ParseResourceArg(resourceArg)
+	if gvr != nil {
+		groupResource = gvr.GroupResource()
+	}
+	return &scaleTarget{&groupResource, name, namespace}, nil
 }
 
 // scaleTarget stores the scalable target recourse
 type scaleTarget struct {
-	kind      string
-	name      string
-	namespace string
+	groupResource *schema.GroupResource
+	name          string
+	namespace     string
 }
 
 func (k *k8sClient) GetNamespace() (namespace string) {
@@ -170,10 +215,6 @@ type ClusterStatus struct {
 }
 
 func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error) {
-	// TODO: Consider moving this to NewK8sClient method and failing fast when
-	// reflector can't initialize. That is a tradeoff between silently non-working
-	// component and explicit restarts of it. In majority of the cases the restart
-	// won't repair it - though it may give better visibility into problems.
 	err = wait.PollImmediate(250*time.Millisecond, 5*time.Second, func() (bool, error) {
 		if k.reflector.LastSyncResourceVersion() == "" {
 			return false, nil
@@ -208,102 +249,29 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	return clusterStatus, nil
 }
 
-func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err error) {
-	prevRelicas, err = k.updateReplicasAppsV1(expReplicas)
-	if err == nil || !apierrors.IsForbidden(err) {
-		return prevRelicas, err
-	}
-	glog.V(1).Infof("Falling back to extensions/v1beta1, error using apps/v1: %v", err)
-
-	// Fall back to using the extensions API if we get a forbidden error
-	scale, err := k.getScaleExtensionsV1beta1(k.target)
+func (k *k8sClient) UpdateReplicas(expReplicas int32) (int32, error) {
+	prevScale, err := k.scaleNamespacer.Scales(k.target.namespace).Get(*k.target.groupResource, k.target.name)
 	if err != nil {
 		return 0, err
 	}
-	prevRelicas = scale.Spec.Replicas
-	if expReplicas != prevRelicas {
-		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.TotalNodes, k.clusterStatus.SchedulableCores, k.clusterStatus.TotalCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
-		scale.Spec.Replicas = expReplicas
-		_, err = k.updateScaleExtensionsV1beta1(k.target, scale)
-		if err != nil {
-			return 0, err
-		}
-	}
-	return prevRelicas, nil
-}
-
-func (k *k8sClient) getScaleExtensionsV1beta1(target *scaleTarget) (*extensionsv1beta1.Scale, error) {
-	opt := metav1.GetOptions{}
-	switch strings.ToLower(target.kind) {
-	case "deployment", "deployments":
-		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).GetScale(target.name, opt)
-	case "replicaset", "replicasets":
-		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).GetScale(target.name, opt)
-	default:
-		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
-	}
-}
-
-func (k *k8sClient) updateScaleExtensionsV1beta1(target *scaleTarget, scale *extensionsv1beta1.Scale) (*extensionsv1beta1.Scale, error) {
-	switch strings.ToLower(target.kind) {
-	case "deployment", "deployments":
-		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).UpdateScale(target.name, scale)
-	case "replicaset", "replicasets":
-		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).UpdateScale(target.name, scale)
-	default:
-		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
-	}
-}
-
-func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, err error) {
-	req, err := requestForTarget(k.clientset.AppsV1().RESTClient().Get(), k.target)
-	if err != nil {
-		return 0, err
-	}
-
-	scale := &autoscalingv1.Scale{}
-	if err = req.Do().Into(scale); err != nil {
-		return 0, err
-	}
-
-	prevRelicas = scale.Spec.Replicas
-	if expReplicas != prevRelicas {
+	prevReplicas := prevScale.Spec.Replicas
+	if expReplicas != prevReplicas {
 		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
-		scale.Spec.Replicas = expReplicas
-		req, err = requestForTarget(k.clientset.AppsV1().RESTClient().Put(), k.target)
+		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevReplicas, expReplicas)
+
+		scaleResource := &autoscalingv1.Scale{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      k.target.name,
+				Namespace: k.target.namespace,
+			},
+			Spec: autoscalingv1.ScaleSpec{
+				Replicas: expReplicas,
+			},
+		}
+		_, err = k.scaleNamespacer.Scales(k.target.namespace).Update(*k.target.groupResource, scaleResource)
 		if err != nil {
-			return 0, err
-		}
-		if err = req.Body(scale).Do().Error(); err != nil {
-			return 0, err
+			return prevReplicas, err
 		}
 	}
-
-	return prevRelicas, nil
-}
-
-func requestForTarget(req *rest.Request, target *scaleTarget) (*rest.Request, error) {
-	var absPath, resource string
-	// Support the kinds we allowed scaling via the extensions API group
-	// TODO: switch to use the polymorphic scale client once client-go versions are updated
-	switch strings.ToLower(target.kind) {
-	case "deployment", "deployments":
-		absPath = "/apis/apps/v1"
-		resource = "deployments"
-	case "replicaset", "replicasets":
-		absPath = "/apis/apps/v1"
-		resource = "replicasets"
-	case "statefulset", "statefulsets":
-		absPath = "/apis/apps/v1"
-		resource = "statefulsets"
-	case "replicationcontroller", "replicationcontrollers":
-		absPath = "/api/v1"
-		resource = "replicationcontrollers"
-	default:
-		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
-	}
-
-	return req.AbsPath(absPath).Namespace(target.namespace).Resource(resource).Name(target.name).SubResource("scale"), nil
+	return prevReplicas, nil
 }

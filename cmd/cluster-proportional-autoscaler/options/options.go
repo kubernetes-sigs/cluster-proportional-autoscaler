@@ -77,16 +77,28 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 
 func isTargetFormatValid(target string) bool {
 	if target == "" {
-		glog.Errorf("--target parameter cannot be empty")
+		glog.Error("--target parameter cannot be empty")
 		return false
 	}
-	if !strings.HasPrefix(target, "deployment/") &&
-		!strings.HasPrefix(target, "replicationcontroller/") &&
-		!strings.HasPrefix(target, "replicaset/") {
-		glog.Errorf("Target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
+
+	splits := strings.Split(target, "/")
+	resourceSplits := strings.Split(splits[0], ".")
+
+	if len(splits) != 2 {
+		glog.Error("--target must include resource and name")
 		return false
 	}
-	return true
+
+	if (len(resourceSplits) == 2 || len(resourceSplits) == 3) ||
+		strings.HasPrefix(splits[0], "deployment") ||
+		strings.HasPrefix(splits[0], "replicaset") ||
+		strings.HasPrefix(splits[0], "statefulset") ||
+		strings.HasPrefix(splits[0], "replicationcontroller") {
+		return true
+	}
+
+	glog.Errorf("--target must include valid resource %q", resourceSplits)
+	return false
 }
 
 type configMapData map[string]string
@@ -117,7 +129,7 @@ func (c *configMapData) Type() string {
 
 // AddFlags adds flags for a specific AutoScaler to the specified FlagSet
 func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
+	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicaset/*, statefulset/* or resource.group (not case sensitive).")
 	fs.StringVar(&c.ConfigMap, "configmap", c.ConfigMap, "ConfigMap containing our scaling parameters.")
 	fs.StringVar(&c.Namespace, "namespace", c.Namespace, "Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.")
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")

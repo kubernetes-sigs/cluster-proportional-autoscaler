@@ -22,7 +22,7 @@ Usage of cluster-proportional-autoscaler:
       --namespace="": Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.
       --poll-period-seconds=10: The time, in seconds, to check cluster status and perform autoscale.
       --stderrthreshold=2: logs at or above this threshold go to stderr
-      --target="": Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).
+      --target="": Target to scale. In format: deployment/*, replicaset/*, statefulset/* or resource.group (not case sensitive).
       --v=0: log level for V logs
       --version[=false]: Print the version and exit.
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
@@ -90,9 +90,9 @@ replicas to take care of all 13 cores. Controller will choose the greater one, w
 
 When `includeUnschedulableNodes` is set to `true`, the replicas will scale based on the total number of nodes.
 Otherwise, the replicas will only scale based on the number of schedulable nodes (i.e., cordoned and draining nodes are
-excluded.) 
+excluded.)
 
-Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max`, 
+Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max`,
 `preventSinglePointFailure` and `includeUnscheduleableNodes` are optional. If not set, `min` would be default to `1`,
 `preventSinglePointFailure` will be default to `false` and `includeUnschedulableNodes` will be default to `false`.
 
