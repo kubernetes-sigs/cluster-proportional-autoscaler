@@ -106,6 +106,9 @@ push-name:
 
 multiarch-container: arch-push
 	docker manifest create $(MULTIARCH_IMAGE):$(VERSION) $(addprefix --amend $(REGISTRY)/$(BIN)-, $(addsuffix :$(VERSION), $(ALL_ARCH)))
+	for arch in $(ALL_ARCH); do \
+		docker manifest annotate --arch $${arch} $(MULTIARCH_IMAGE):$(VERSION) $(REGISTRY)/$(BIN)-$${arch}:$(VERSION) ; \
+	done
 
 all-push: multiarch-container
 	@gcloud docker -- manifest push $(MULTIARCH_IMAGE):$(VERSION)
