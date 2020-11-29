@@ -69,7 +69,7 @@ data:
       "nodesPerReplica": 1,
       "min": 1,
       "max": 100,
-      "preventSinglePointFailure": true
+      "preventSinglePointFailure": true,
       "includeUnschedulableNodes": true
     }
 ```
