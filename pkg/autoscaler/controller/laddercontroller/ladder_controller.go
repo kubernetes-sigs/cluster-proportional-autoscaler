@@ -131,7 +131,7 @@ func (c *LadderController) getExpectedReplicasFromParams(schedulableNodes, sched
 
 func getExpectedReplicasFromEntries(schedulableResources int, entries []paramEntry) int {
 	if len(entries) == 0 {
-		return 1
+		return 0
 	}
 	// Binary search for the corresponding replicas number
 	pos := sort.Search(
