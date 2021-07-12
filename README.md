@@ -30,6 +30,20 @@ Usage of cluster-proportional-autoscaler:
       --max-sync-failures=[0]: Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.
 ```
 
+## Installation with helm
+
+Add the cluster-proportional-autoscaler Helm repository:
+```sh
+helm repo add cluster-proportional-autoscaler https://kubernetes-sigs.github.io/cluster-proportional-autoscaler
+helm repo update
+```
+
+Then install a release using the chart.  The [charts default values file](charts/cluster-proportional-autoscaler/values.yaml) provides some commented out examples for setting some of the values.  There are several required values, but helm should fail with messages that indicate which value is missing.
+```sh
+helm upgrade --install cluster-proportional-autoscaler \
+    cluster-proportional-autoscaler/cluster-proportional-autoscaler --values <<name_of_your_values_file>>.yaml
+```
+
 ## Examples
 
 Please try out the examples in [the examples folder](examples/).
@@ -90,9 +104,9 @@ replicas to take care of all 13 cores. Controller will choose the greater one, w
 
 When `includeUnschedulableNodes` is set to `true`, the replicas will scale based on the total number of nodes.
 Otherwise, the replicas will only scale based on the number of schedulable nodes (i.e., cordoned and draining nodes are
-excluded.) 
+excluded.)
 
-Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max`, 
+Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max`,
 `preventSinglePointFailure` and `includeUnscheduleableNodes` are optional. If not set, `min` would be default to `1`,
 `preventSinglePointFailure` will be default to `false` and `includeUnschedulableNodes` will be default to `false`.
 

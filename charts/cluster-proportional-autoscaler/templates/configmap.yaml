@@ -1,0 +1,16 @@
+{{ $config := pick .Values.config "ladder" "linear" }}
+{{ if not $config }}
+{{ fail "A config must be supplied for either ladder mode or linear mode" }}
+{{- end }}
+{{- if and $config.ladder $config.linear }}
+{{ fail "You must supply a config for either ladder mode or linear mode but not both" }}
+{{- end }}
+{{ $key := mustFirst (keys $config) }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "cluster-proportional-autoscaler.fullname" . }}
+  namespace: {{ default .Release.Namespace .Values.options.namespace }}
+data:
+  {{ $key }}: |-
+    {{- get $config $key | mustToJson | nindent 4 }}
