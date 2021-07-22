@@ -1,0 +1,17 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "cluster-proportional-autoscaler.fullname" . }}
+  namespace: {{ default .Release.Namespace .Values.options.namespace }}
+  labels:
+    {{- include "cluster-proportional-autoscaler.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["replicationcontrollers/scale"]
+    verbs: ["get", "update"]
+  - apiGroups: ["extensions","apps"]
+    resources: ["deployments/scale", "replicasets/scale"]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]

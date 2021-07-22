@@ -1,0 +1,91 @@
+{{- $target := default "" .Values.options.target }}
+{{- if and (and (not (hasPrefix "deployment/" $target)) (not (hasPrefix "replicationcontroller/" $target))) (not (hasPrefix "replicaset/" $target)) }}
+{{ fail "options.target must be one of deployment, replicationcontroller, or replicaset" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cluster-proportional-autoscaler.fullname" . }}
+  labels:
+    {{- include "cluster-proportional-autoscaler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cluster-proportional-autoscaler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "cluster-proportional-autoscaler.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cluster-proportional-autoscaler.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --configmap={{ include "cluster-proportional-autoscaler.fullname" . }}
+            - --logtostderr={{ ternary true false (not (empty .Values.options.logToStdErr)) }}
+            - --namespace={{ default .Release.Namespace .Values.options.namespace }}
+            - --target={{- required "options.target must be specified" $target }}
+            - --v={{ .Values.options.logLevel | int }}
+            {{- with ternary true false (not (empty .Values.options.alsoLogToStdErr)) }}
+            - --alsologtostderr={{ . }}
+            {{- end }}
+            {{- with .Values.options.logBacktraceAt }}
+            - --log-backtrace-at={{ . }}
+            {{- end }}
+            {{- with .Values.options.logDir }}
+            - --log-dir={{ . }}
+            {{- end }}
+            {{- with .Values.options.maxSyncFailures | toString }}
+            - --max-sync-failures={{ ternary (. | int) 0 (ge (. | int) 0) }}
+            {{- end }}
+            {{- with (include "cluster-proportional-autoscaler.nodeLables" .) }}
+            - --nodelabels={{ . }}
+            {{- end }}
+            {{- with .Values.options.pollPeriodSeconds }}
+            - --poll-period-seconds={{ ternary (. | int) 1 (gt (. | int) 0) }}
+            {{- end }}
+            {{- with .Values.options.stdErrThreshold }}
+            - --stderrthreshold={{ . }}
+            {{- end }}
+            {{- with .Values.options.vmodule }}
+            - --vmodule={{ . }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
