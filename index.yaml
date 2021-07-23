@@ -1,0 +1,18 @@
+apiVersion: v1
+entries:
+  cluster-proportional-autoscaler:
+  - apiVersion: v2
+    appVersion: 1.8.4
+    created: "2021-07-23T17:51:20.553039078Z"
+    description: This chart is used to deploy an instance of the cluster-proportional-autoscaler.
+    digest: 5efbd91c77c5366a369b377180b5e7472598555d7f38a010ebfd427a7d73c355
+    maintainers:
+    - name: krmichel
+      url: https://github.com/krmichel
+    - name: d-mcd
+      url: https://github.com/d-mcd
+    name: cluster-proportional-autoscaler
+    urls:
+    - https://github.com/kubernetes-sigs/cluster-proportional-autoscaler/releases/download/helm-chart-cluster-proportional-autoscaler-1.0.0/cluster-proportional-autoscaler-1.0.0.tgz
+    version: 1.0.0
+generated: "2021-07-23T17:51:20.553340179Z"
