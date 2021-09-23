@@ -1,4 +1,4 @@
-module github.com/kubernetes-incubator/cluster-proportional-autoscaler
+module github.com/kubernetes-sigs/cluster-proportional-autoscaler
 
 go 1.12
 

@@ -25,9 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
 
 func TestRun(t *testing.T) {
