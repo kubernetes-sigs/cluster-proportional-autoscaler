@@ -19,7 +19,7 @@ package controller
 import (
 	"k8s.io/api/core/v1"
 
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
 
 // Controller defines the interface every controller should implement

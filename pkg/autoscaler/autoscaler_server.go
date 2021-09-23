@@ -23,10 +23,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/clock"
 
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/plugin"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/plugin"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 
 	"github.com/golang/glog"
 )

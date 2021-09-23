@@ -21,9 +21,9 @@ import (
 
 	"k8s.io/api/core/v1"
 
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
 
 	"github.com/golang/glog"
 )

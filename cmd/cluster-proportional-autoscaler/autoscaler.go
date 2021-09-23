@@ -22,9 +22,9 @@ import (
 
 	"k8s.io/component-base/cli/flag"
 
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/autoscaler"
-	"github.com/kubernetes-incubator/cluster-proportional-autoscaler/pkg/version"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler"
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/version"
 
 	"github.com/golang/glog"
 	"github.com/spf13/pflag"
