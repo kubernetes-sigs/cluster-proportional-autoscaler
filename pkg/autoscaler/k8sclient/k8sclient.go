@@ -17,6 +17,7 @@ limitations under the License.
 package k8sclient
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -86,10 +87,10 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 	opts := metav1.ListOptions{LabelSelector: nodelabels}
 	nodeListWatch := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return clientset.CoreV1().Nodes().List(opts)
+			return clientset.CoreV1().Nodes().List(context.TODO(), opts)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return clientset.CoreV1().Nodes().Watch(opts)
+			return clientset.CoreV1().Nodes().Watch(context.TODO(), opts)
 		},
 	}
 	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
@@ -128,7 +129,7 @@ func (k *k8sClient) GetNamespace() (namespace string) {
 }
 
 func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*v1.ConfigMap, error) {
-	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Get(configmap, metav1.GetOptions{})
+	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Get(context.TODO(), configmap, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (k *k8sClient) CreateConfigMap(namespace, configmap string, params map[stri
 	providedConfigMap.ObjectMeta.Name = configmap
 	providedConfigMap.ObjectMeta.Namespace = namespace
 	providedConfigMap.Data = params
-	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Create(&providedConfigMap)
+	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Create(context.TODO(), &providedConfigMap, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (k *k8sClient) UpdateConfigMap(namespace, configmap string, params map[stri
 	providedConfigMap.ObjectMeta.Name = configmap
 	providedConfigMap.ObjectMeta.Namespace = namespace
 	providedConfigMap.Data = params
-	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Update(&providedConfigMap)
+	cm, err := k.clientset.CoreV1().ConfigMaps(namespace).Update(context.TODO(), &providedConfigMap, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -237,9 +238,9 @@ func (k *k8sClient) getScaleExtensionsV1beta1(target *scaleTarget) (*extensionsv
 	opt := metav1.GetOptions{}
 	switch strings.ToLower(target.kind) {
 	case "deployment", "deployments":
-		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).GetScale(target.name, opt)
+		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).GetScale(context.TODO(), target.name, opt)
 	case "replicaset", "replicasets":
-		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).GetScale(target.name, opt)
+		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).GetScale(context.TODO(), target.name, opt)
 	default:
 		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
 	}
@@ -248,9 +249,9 @@ func (k *k8sClient) getScaleExtensionsV1beta1(target *scaleTarget) (*extensionsv
 func (k *k8sClient) updateScaleExtensionsV1beta1(target *scaleTarget, scale *extensionsv1beta1.Scale) (*extensionsv1beta1.Scale, error) {
 	switch strings.ToLower(target.kind) {
 	case "deployment", "deployments":
-		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).UpdateScale(target.name, scale)
+		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).UpdateScale(context.TODO(), target.name, scale, metav1.UpdateOptions{})
 	case "replicaset", "replicasets":
-		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).UpdateScale(target.name, scale)
+		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).UpdateScale(context.TODO(), target.name, scale, metav1.UpdateOptions{})
 	default:
 		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
 	}
@@ -263,7 +264,7 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, 
 	}
 
 	scale := &autoscalingv1.Scale{}
-	if err = req.Do().Into(scale); err != nil {
+	if err = req.Do(context.TODO()).Into(scale); err != nil {
 		return 0, err
 	}
 
@@ -276,7 +277,7 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, 
 		if err != nil {
 			return 0, err
 		}
-		if err = req.Body(scale).Do().Error(); err != nil {
+		if err = req.Body(scale).Do(context.TODO()).Error(); err != nil {
 			return 0, err
 		}
 	}
