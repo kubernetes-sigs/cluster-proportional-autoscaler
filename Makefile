@@ -37,7 +37,7 @@ ALL_ARCH := amd64 arm arm64 ppc64le
 
 IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
 
-BUILD_IMAGE ?= golang:1.12.7-alpine
+BUILD_IMAGE ?= golang:1.18.4-alpine
 
 MULTIARCH_IMAGE := $(REGISTRY)/$(BIN)
 

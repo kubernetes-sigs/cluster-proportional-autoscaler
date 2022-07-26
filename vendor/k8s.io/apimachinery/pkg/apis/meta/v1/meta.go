@@ -55,14 +55,12 @@ type Object interface {
 	SetLabels(labels map[string]string)
 	GetAnnotations() map[string]string
 	SetAnnotations(annotations map[string]string)
-	GetInitializers() *Initializers
-	SetInitializers(initializers *Initializers)
 	GetFinalizers() []string
 	SetFinalizers(finalizers []string)
 	GetOwnerReferences() []OwnerReference
 	SetOwnerReferences([]OwnerReference)
-	GetClusterName() string
-	SetClusterName(clusterName string)
+	GetZZZ_DeprecatedClusterName() string
+	SetZZZ_DeprecatedClusterName(clusterName string)
 	GetManagedFields() []ManagedFieldsEntry
 	SetManagedFields(managedFields []ManagedFieldsEntry)
 }
@@ -158,7 +156,9 @@ func (meta *ObjectMeta) GetDeletionTimestamp() *Time { return meta.DeletionTimes
 func (meta *ObjectMeta) SetDeletionTimestamp(deletionTimestamp *Time) {
 	meta.DeletionTimestamp = deletionTimestamp
 }
-func (meta *ObjectMeta) GetDeletionGracePeriodSeconds() *int64 { return meta.DeletionGracePeriodSeconds }
+func (meta *ObjectMeta) GetDeletionGracePeriodSeconds() *int64 {
+	return meta.DeletionGracePeriodSeconds
+}
 func (meta *ObjectMeta) SetDeletionGracePeriodSeconds(deletionGracePeriodSeconds *int64) {
 	meta.DeletionGracePeriodSeconds = deletionGracePeriodSeconds
 }
@@ -166,16 +166,16 @@ func (meta *ObjectMeta) GetLabels() map[string]string                 { return m
 func (meta *ObjectMeta) SetLabels(labels map[string]string)           { meta.Labels = labels }
 func (meta *ObjectMeta) GetAnnotations() map[string]string            { return meta.Annotations }
 func (meta *ObjectMeta) SetAnnotations(annotations map[string]string) { meta.Annotations = annotations }
-func (meta *ObjectMeta) GetInitializers() *Initializers               { return meta.Initializers }
-func (meta *ObjectMeta) SetInitializers(initializers *Initializers)   { meta.Initializers = initializers }
 func (meta *ObjectMeta) GetFinalizers() []string                      { return meta.Finalizers }
 func (meta *ObjectMeta) SetFinalizers(finalizers []string)            { meta.Finalizers = finalizers }
 func (meta *ObjectMeta) GetOwnerReferences() []OwnerReference         { return meta.OwnerReferences }
 func (meta *ObjectMeta) SetOwnerReferences(references []OwnerReference) {
 	meta.OwnerReferences = references
 }
-func (meta *ObjectMeta) GetClusterName() string                 { return meta.ClusterName }
-func (meta *ObjectMeta) SetClusterName(clusterName string)      { meta.ClusterName = clusterName }
+func (meta *ObjectMeta) GetZZZ_DeprecatedClusterName() string { return meta.ZZZ_DeprecatedClusterName }
+func (meta *ObjectMeta) SetZZZ_DeprecatedClusterName(clusterName string) {
+	meta.ZZZ_DeprecatedClusterName = clusterName
+}
 func (meta *ObjectMeta) GetManagedFields() []ManagedFieldsEntry { return meta.ManagedFields }
 func (meta *ObjectMeta) SetManagedFields(managedFields []ManagedFieldsEntry) {
 	meta.ManagedFields = managedFields
