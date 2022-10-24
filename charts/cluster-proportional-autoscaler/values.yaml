@@ -37,15 +37,15 @@ options:
   maxSyncFailures:
   namespace:
   nodeLabels: {}
-  #    label1: value1
-  #    label2: value2
+  #  label1: value1
+  #  label2: value2
   pollPeriodSeconds:
   stdErrThreshold:
   target:
   vmodule:
 podAnnotations: {}
 podSecurityContext: {}
-# fsGroup: 2000
+  # fsGroup: 2000
 replicaCount: 1
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -57,14 +57,14 @@ resources: {}
   #   memory: 128Mi
   # requests:
   #   cpu: 100m
-#   memory: 128Mi
+  #   memory: 128Mi
 securityContext: {}
   # capabilities:
   #   drop:
   #   - ALL
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
-# runAsUser: 1000
+  # runAsUser: 1000
 serviceAccount:
   create: true
   annotations: {}
@@ -73,3 +73,4 @@ serviceAccount:
   # If set and create is false, no service account will be created and the expectation is that the provided service account already exists or it will use the "default" service account
   name:
 tolerations: []
+priorityClassName: ""

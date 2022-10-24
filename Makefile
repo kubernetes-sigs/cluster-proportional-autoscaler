@@ -35,9 +35,12 @@ SRC_DIRS := cmd pkg # directories which hold app source (not vendored)
 
 ALL_ARCH := amd64 arm arm64 ppc64le
 
+# The output type could either be docker (local), or registry.
+OUTPUT_TYPE ?= docker
+
 IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
 
-BUILD_IMAGE ?= golang:1.12.7-alpine
+BUILD_IMAGE ?= golang:1.18.4-alpine
 
 MULTIARCH_IMAGE := $(REGISTRY)/$(BIN)
 
@@ -84,13 +87,16 @@ bin/$(ARCH)/$(BIN): build-dirs
 
 DOTFILE_IMAGE = $(subst /,_,$(IMAGE))-$(VERSION)
 
+buildx-setup:
+	docker buildx inspect img-builder > /dev/null || docker buildx create --name img-builder --use
+
 container: .container-$(DOTFILE_IMAGE) container-name
-.container-$(DOTFILE_IMAGE): bin/$(ARCH)/$(BIN) Dockerfile.in
+.container-$(DOTFILE_IMAGE): bin/$(ARCH)/$(BIN) Dockerfile.in buildx-setup
 	@sed \
 	    -e 's|ARG_BIN|$(BIN)|g' \
 	    -e 's|ARG_ARCH|$(ARCH)|g' \
 	    Dockerfile.in > .dockerfile-$(ARCH)
-	@docker build --pull -t $(IMAGE):$(VERSION) -f .dockerfile-$(ARCH) .
+	@docker buildx build --pull --platform linux/$(ARCH) --output=type=$(OUTPUT_TYPE) -t $(IMAGE):$(VERSION) -f .dockerfile-$(ARCH) .
 	@docker images -q $(IMAGE):$(VERSION) > $@
 
 container-name:
