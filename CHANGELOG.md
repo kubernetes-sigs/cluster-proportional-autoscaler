@@ -1,3 +1,6 @@
+### Version 1.8.6 (Mon Aug 15 2022 Zihong Zheng <zihongz@google.com>)
+ - Use docker buildx for multi-arch image.
+
 ### Version 1.8.5 (Wed Aug 14 2021 Zihong Zheng <zihongz@google.com>)
  - Change minimum replicas to zero in laddermode.
 
