@@ -40,7 +40,7 @@ OUTPUT_TYPE ?= docker
 
 IMAGE := $(REGISTRY)/$(BIN)-$(ARCH)
 
-BUILD_IMAGE ?= golang:1.18.4-alpine
+BUILD_IMAGE ?= golang:1.19.4-alpine
 
 MULTIARCH_IMAGE := $(REGISTRY)/$(BIN)
 
