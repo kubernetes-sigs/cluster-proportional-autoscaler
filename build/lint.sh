@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright 2016 The Kubernetes Authors.
+# Copyright 2022 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,17 @@ set -o pipefail
 export CGO_ENABLED=0
 export GO111MODULE=on
 
-echo "Running tests:"
-go test -installsuffix "static" "$@"
+cd tools >/dev/null
+go install github.com/golangci/golangci-lint/cmd/golangci-lint
+cd - >/dev/null
+
+echo -n "Running golangci-lint: "
+ERRS=$(golangci-lint run "$@" 2>&1 || true)
+if [ -n "${ERRS}" ]; then
+    echo "FAIL"
+    echo "${ERRS}"
+    echo
+    exit 1
+fi
+echo "PASS"
 echo
