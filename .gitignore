@@ -3,4 +3,5 @@
 /.push-*
 /.container-*
 /.dockerfile-*
-/.idea/
+/.licenses*
+/.buildx-initialized
