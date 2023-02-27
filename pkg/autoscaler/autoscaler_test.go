@@ -22,8 +22,8 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
+	testingclock "k8s.io/utils/clock/testing"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
@@ -68,7 +68,7 @@ func TestRun(t *testing.T) {
 		ConfigMap:     &testConfigMap,
 	}
 
-	fakeClock := clock.NewFakeClock(time.Now())
+	fakeClock := testingclock.NewFakeClock(time.Now())
 	fakePollPeriod := 5 * time.Second
 	fakeConfigMapName := "fake-cluster-proportional-autoscaler-params"
 	autoScaler := &AutoScaler{
@@ -217,7 +217,7 @@ func TestRun_MaxRetries(t *testing.T) {
 		},
 	}
 	var exitFnCalled bool
-	fakeClock := clock.NewFakeClock(time.Now())
+	fakeClock := testingclock.NewFakeClock(time.Now())
 	fakePollPeriod := 5 * time.Second
 	fakeConfigMapName := "fake-cluster-proportional-autoscaler-params"
 	readyCh := make(chan struct{})
