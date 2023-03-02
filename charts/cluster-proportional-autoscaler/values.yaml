@@ -19,7 +19,7 @@ config: {}
 #    preventSinglePointFailure: true
 #    includeUnschedulableNodes: true
 image:
-  repository: k8s.gcr.io/cpa/cluster-proportional-autoscaler
+  repository: registry.k8s.io/cpa/cluster-proportional-autoscaler
   pullPolicy: IfNotPresent
   tag:
 imagePullSecrets: []
