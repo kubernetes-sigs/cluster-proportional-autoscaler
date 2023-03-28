@@ -21,7 +21,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/utils/clock"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller"
@@ -38,7 +38,7 @@ type AutoScaler struct {
 	configMapName       string
 	defaultParams       map[string]string
 	pollPeriod          time.Duration
-	clock               clock.Clock
+	clock               clock.WithTicker
 	stopCh              chan struct{}
 	readyCh             chan<- struct{} // For testing.
 	healthServer        HealthServer
