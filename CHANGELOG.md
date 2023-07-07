@@ -1,3 +1,11 @@
+### Version 1.8.8 (Tue Mar 28 2023 Zihong Zheng <zihongz@google.com>)
+ - Support custom priorityClassName in the helm chart.
+ - Update go dependencies.
+ - Version tag now comes with the v prefix (v1.8.8) to be consistent with the other k8s repos.
+
+### Version 1.8.7 (Thu Jan 26 2023 Zihong Zheng <zihongz@google.com>)
+ - Bump go version to resolve Golang CVEs.
+
 ### Version 1.8.6 (Mon Aug 15 2022 Zihong Zheng <zihongz@google.com>)
  - Use docker buildx for multi-arch image.
 
