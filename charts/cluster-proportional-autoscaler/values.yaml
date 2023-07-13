@@ -47,6 +47,7 @@ podAnnotations: {}
 podSecurityContext: {}
   # fsGroup: 2000
 rbac:
+  clusterScoped: true
   create: true
 replicaCount: 1
 resources: {}
