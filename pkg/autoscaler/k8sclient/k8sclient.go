@@ -83,14 +83,14 @@ func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error
 	}
 
 	// Start propagating contents of the nodeStore.
-
-	opts := metav1.ListOptions{LabelSelector: nodelabels}
 	nodeListWatch := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return clientset.CoreV1().Nodes().List(context.TODO(), opts)
+			options.LabelSelector = nodelabels
+			return clientset.CoreV1().Nodes().List(context.TODO(), options)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return clientset.CoreV1().Nodes().Watch(context.TODO(), opts)
+			options.LabelSelector = nodelabels
+			return clientset.CoreV1().Nodes().Watch(context.TODO(), options)
 		},
 	}
 	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
