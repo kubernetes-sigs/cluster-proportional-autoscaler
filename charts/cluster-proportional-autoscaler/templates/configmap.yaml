@@ -12,5 +12,7 @@ metadata:
   name: {{ include "cluster-proportional-autoscaler.fullname" . }}
   namespace: {{ default .Release.Namespace .Values.options.namespace }}
 data:
+  {{- if $key }}
   {{ $key }}: |-
     {{- get $config $key | mustToJson | nindent 4 }}
+  {{- end }}
