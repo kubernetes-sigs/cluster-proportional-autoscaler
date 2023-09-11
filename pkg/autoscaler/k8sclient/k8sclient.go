@@ -49,12 +49,12 @@ type K8sClient interface {
 	// GetNamespace returns the namespace of target resource.
 	GetNamespace() (namespace string)
 	// UpdateReplicas updates the number of replicas for the resource and return the previous replicas count
-	UpdateReplicas(expReplicas int32) (prevReplicas int32, err error)
+	UpdateReplicas(expReplicas int32) (err error)
 }
 
 // k8sClient - Wraps all Kubernetes API client functionalities
 type k8sClient struct {
-	target        *scaleTarget
+	scaleTargets  *scaleTargets
 	clientset     kubernetes.Interface
 	clusterStatus *ClusterStatus
 	nodeLister    corelisters.NodeLister
@@ -100,38 +100,56 @@ func NewK8sClient(clientset kubernetes.Interface, namespace, target string, node
 	factory.Start(stopCh)
 	factory.WaitForCacheSync(stopCh)
 
-	scaleTarget, err := getScaleTarget(target, namespace)
+	scaleTargets, err := getScaleTargets(target, namespace)
 	if err != nil {
 		return nil, err
 	}
 
 	return &k8sClient{
-		target:     scaleTarget,
-		clientset:  clientset,
-		nodeLister: nodeLister,
-		stopCh:     stopCh,
+		scaleTargets: scaleTargets,
+		clientset:    clientset,
+		nodeLister:   nodeLister,
+		stopCh:       stopCh,
 	}, nil
 }
 
-func getScaleTarget(target, namespace string) (*scaleTarget, error) {
-	splits := strings.Split(target, "/")
+func getScaleTargets(targets, namespace string) (*scaleTargets, error) {
+	st := &scaleTargets{targets: []target{}, namespace: namespace}
+
+	for _, el := range strings.Split(targets, ",") {
+		el := strings.TrimSpace(el)
+		target, err := getTarget(el)
+		if err != nil {
+			return &scaleTargets{}, fmt.Errorf("target format error: %v", targets)
+		}
+		st.targets = append(st.targets, target)
+	}
+	return st, nil
+}
+
+func getTarget(t string) (target, error) {
+	splits := strings.Split(t, "/")
 	if len(splits) != 2 {
-		return &scaleTarget{}, fmt.Errorf("target format error: %v", target)
+		return target{}, fmt.Errorf("target format error: %v", t)
 	}
 	kind := splits[0]
 	name := splits[1]
-	return &scaleTarget{kind, name, namespace}, nil
+	return target{kind, name}, nil
 }
 
-// scaleTarget stores the scalable target recourse
-type scaleTarget struct {
-	kind      string
-	name      string
+type target struct {
+	kind string
+	name string
+}
+
+// scaleTargets stores the scalable target resources
+type scaleTargets struct {
+	targets   []target
 	namespace string
 }
 
 func (k *k8sClient) GetNamespace() (namespace string) {
-	return k.target.namespace
+	return k.scaleTargets.namespace
 }
 
 func (k *k8sClient) FetchConfigMap(namespace, configmap string) (*v1.ConfigMap, error) {
@@ -200,24 +218,43 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	return clusterStatus, nil
 }
 
-func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevReplicas int32, err error) {
-	prevReplicas, err = k.updateReplicasAppsV1(expReplicas)
+func (k *k8sClient) UpdateReplicas(expReplicas int32) (err error) {
+	for _, target := range k.scaleTargets.targets {
+		_, err := k.UpdateTargetReplicas(expReplicas, target)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (k *k8sClient) UpdateTargetReplicas(expReplicas int32, target target) (prevReplicas int32, err error) {
+	prevReplicas, err = k.updateReplicasAppsV1(expReplicas, target)
 	if err == nil || !apierrors.IsForbidden(err) {
 		return prevReplicas, err
 	}
 	glog.V(1).Infof("Falling back to extensions/v1beta1, error using apps/v1: %v", err)
 
 	// Fall back to using the extensions API if we get a forbidden error
-	scale, err := k.getScaleExtensionsV1beta1(k.target)
+	scale, err := k.getScaleExtensionsV1beta1(&target)
 	if err != nil {
 		return 0, err
 	}
 	prevReplicas = scale.Spec.Replicas
 	if expReplicas != prevReplicas {
-		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.TotalNodes, k.clusterStatus.SchedulableCores, k.clusterStatus.TotalCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevReplicas, expReplicas)
+		glog.V(0).Infof(
+			"Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]",
+			k.clusterStatus.SchedulableNodes,
+			k.clusterStatus.TotalNodes,
+			k.clusterStatus.SchedulableCores,
+			k.clusterStatus.TotalCores)
+		glog.V(0).Infof("Replicas are not as expected : updating %s/%s from %d to %d",
+			target.kind,
+			target.name,
+			prevReplicas,
+			expReplicas)
 		scale.Spec.Replicas = expReplicas
-		_, err = k.updateScaleExtensionsV1beta1(k.target, scale)
+		_, err = k.updateScaleExtensionsV1beta1(&target, scale)
 		if err != nil {
 			return 0, err
 		}
@@ -225,31 +262,31 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevReplicas int32, err e
 	return prevReplicas, nil
 }
 
-func (k *k8sClient) getScaleExtensionsV1beta1(target *scaleTarget) (*extensionsv1beta1.Scale, error) {
+func (k *k8sClient) getScaleExtensionsV1beta1(target *target) (*extensionsv1beta1.Scale, error) {
 	opt := metav1.GetOptions{}
 	switch strings.ToLower(target.kind) {
 	case "deployment", "deployments":
-		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).GetScale(context.TODO(), target.name, opt)
+		return k.clientset.ExtensionsV1beta1().Deployments(k.scaleTargets.namespace).GetScale(context.TODO(), target.name, opt)
 	case "replicaset", "replicasets":
-		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).GetScale(context.TODO(), target.name, opt)
+		return k.clientset.ExtensionsV1beta1().ReplicaSets(k.scaleTargets.namespace).GetScale(context.TODO(), target.name, opt)
 	default:
 		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
 	}
 }
 
-func (k *k8sClient) updateScaleExtensionsV1beta1(target *scaleTarget, scale *extensionsv1beta1.Scale) (*extensionsv1beta1.Scale, error) {
+func (k *k8sClient) updateScaleExtensionsV1beta1(target *target, scale *extensionsv1beta1.Scale) (*extensionsv1beta1.Scale, error) {
 	switch strings.ToLower(target.kind) {
 	case "deployment", "deployments":
-		return k.clientset.ExtensionsV1beta1().Deployments(target.namespace).UpdateScale(context.TODO(), target.name, scale, metav1.UpdateOptions{})
+		return k.clientset.ExtensionsV1beta1().Deployments(k.scaleTargets.namespace).UpdateScale(context.TODO(), target.name, scale, metav1.UpdateOptions{})
 	case "replicaset", "replicasets":
-		return k.clientset.ExtensionsV1beta1().ReplicaSets(target.namespace).UpdateScale(context.TODO(), target.name, scale, metav1.UpdateOptions{})
+		return k.clientset.ExtensionsV1beta1().ReplicaSets(k.scaleTargets.namespace).UpdateScale(context.TODO(), target.name, scale, metav1.UpdateOptions{})
 	default:
 		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
 	}
 }
 
-func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevReplicas int32, err error) {
-	req, err := requestForTarget(k.clientset.AppsV1().RESTClient().Get(), k.target)
+func (k *k8sClient) updateReplicasAppsV1(expReplicas int32, target target) (prevReplicas int32, err error) {
+	req, err := requestForTarget(k.clientset.AppsV1().RESTClient().Get(), &target, k.scaleTargets.namespace)
 	if err != nil {
 		return 0, err
 	}
@@ -261,10 +298,19 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevReplicas int32,
 
 	prevReplicas = scale.Spec.Replicas
 	if expReplicas != prevReplicas {
-		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.TotalNodes, k.clusterStatus.SchedulableCores, k.clusterStatus.TotalCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevReplicas, expReplicas)
+		glog.V(0).Infof(
+			"Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]",
+			k.clusterStatus.SchedulableNodes,
+			k.clusterStatus.TotalNodes,
+			k.clusterStatus.SchedulableCores,
+			k.clusterStatus.TotalCores)
+		glog.V(0).Infof("Replicas are not as expected : updating %s/%s from %d to %d",
+			target.kind,
+			target.name,
+			prevReplicas,
+			expReplicas)
 		scale.Spec.Replicas = expReplicas
-		req, err = requestForTarget(k.clientset.AppsV1().RESTClient().Put(), k.target)
+		req, err = requestForTarget(k.clientset.AppsV1().RESTClient().Put(), &target, k.scaleTargets.namespace)
 		if err != nil {
 			return 0, err
 		}
@@ -276,7 +322,7 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevReplicas int32,
 	return prevReplicas, nil
 }
 
-func requestForTarget(req *rest.Request, target *scaleTarget) (*rest.Request, error) {
+func requestForTarget(req *rest.Request, target *target, namespace string) (*rest.Request, error) {
 	var absPath, resource string
 	// Support the kinds we allowed scaling via the extensions API group
 	// TODO: switch to use the polymorphic scale client once client-go versions are updated
@@ -297,5 +343,5 @@ func requestForTarget(req *rest.Request, target *scaleTarget) (*rest.Request, er
 		return nil, fmt.Errorf("unsupported target kind: %v", target.kind)
 	}
 
-	return req.AbsPath(absPath).Namespace(target.namespace).Resource(resource).Name(target.name).SubResource("scale"), nil
+	return req.AbsPath(absPath).Namespace(namespace).Resource(resource).Name(target.name).SubResource("scale"), nil
 }

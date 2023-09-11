@@ -80,12 +80,18 @@ func isTargetFormatValid(target string) bool {
 		glog.Errorf("--target parameter cannot be empty")
 		return false
 	}
-	if !strings.HasPrefix(target, "deployment/") &&
-		!strings.HasPrefix(target, "replicationcontroller/") &&
-		!strings.HasPrefix(target, "replicaset/") {
-		glog.Errorf("Target format error. Please use deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
-		return false
+
+	for _, target := range strings.Split(target, ",") {
+		target := strings.TrimSpace(target)
+
+		if !strings.HasPrefix(target, "deployment/") &&
+			!strings.HasPrefix(target, "replicationcontroller/") &&
+			!strings.HasPrefix(target, "replicaset/") {
+			glog.Errorf("Target format error. Please use 'deployment/*,replicationcontroller/*,replicaset/*' (not case sensitive, comma delimiter supported).")
+			return false
+		}
 	}
+
 	return true
 }
 
@@ -117,7 +123,7 @@ func (c *configMapData) Type() string {
 
 // AddFlags adds flags for a specific AutoScaler to the specified FlagSet
 func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).")
+	fs.StringVar(&c.Target, "target", c.Target, "Target to scale. In format: 'deployment/*,replicationcontroller/*,replicaset/*' (not case sensitive, comma delimiter supported).")
 	fs.StringVar(&c.ConfigMap, "configmap", c.ConfigMap, "ConfigMap containing our scaling parameters.")
 	fs.StringVar(&c.Namespace, "namespace", c.Namespace, "Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.")
 	fs.IntVar(&c.PollPeriodSeconds, "poll-period-seconds", c.PollPeriodSeconds, "The time, in seconds, to check cluster status and perform autoscale.")
