@@ -137,7 +137,7 @@ func (s *AutoScaler) pollAPIServer() error {
 	glog.V(4).Infof("Expected replica count: %3d", expReplicas)
 
 	// Update resource target with expected replicas.
-	_, err = s.k8sClient.UpdateReplicas(expReplicas)
+	err = s.k8sClient.UpdateReplicas(expReplicas)
 	if err != nil {
 		glog.Errorf("Update failure: %s", err)
 	}

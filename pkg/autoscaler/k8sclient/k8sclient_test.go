@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-func TestGetScaleTarget(t *testing.T) {
+func TestGetTarget(t *testing.T) {
 	testCases := []struct {
 		target   string
 		expKind  string
@@ -54,7 +54,7 @@ func TestGetScaleTarget(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		res, err := getScaleTarget(tc.target, "default")
+		res, err := getTarget(tc.target)
 		if err != nil && !tc.expError {
 			t.Errorf("Expect no error, got error for target: %v", tc.target)
 			continue
@@ -64,6 +64,76 @@ func TestGetScaleTarget(t *testing.T) {
 		}
 		if res.kind != tc.expKind || res.name != tc.expName {
 			t.Errorf("Expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expKind, tc.expName, res.kind, res.name)
+		}
+	}
+}
+
+func TestGetScaleTarget(t *testing.T) {
+	testCases := []struct {
+		target          string
+		expScaleTargets *scaleTargets
+		expError        bool
+	}{
+		{
+			"deployment/anything",
+			&scaleTargets{
+				targets: []target{
+					{kind: "deployment", name: "anything"},
+				},
+			},
+			false,
+		},
+		{
+			"deployment/first,deployment/second",
+			&scaleTargets{
+				targets: []target{
+					{kind: "deployment", name: "first"},
+					{kind: "deployment", name: "second"},
+				},
+			},
+			false,
+		},
+		{
+			"deployment/first, deployment/second",
+			&scaleTargets{
+				targets: []target{
+					{kind: "deployment", name: "first"},
+					{kind: "deployment", name: "second"},
+				},
+			},
+			false,
+		},
+		{
+			"deployment/first deployment/second",
+			&scaleTargets{
+				targets: []target{
+					{kind: "deployment", name: "first"},
+					{kind: "deployment", name: "second"},
+				},
+			},
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		res, err := getScaleTarget(tc.target, "default")
+		if err != nil && !tc.expError {
+			t.Errorf("Expect no error, got error for target: %v", tc.target)
+			continue
+		} else if err == nil && tc.expError {
+			t.Errorf("Expect error, got no error for target: %v", tc.target)
+			continue
+		}
+		if len(res.targets) != len(tc.expScaleTargets.targets) && !tc.expError {
+			t.Errorf("Expected targets vs resulted targets should be the same length: %v vs %v", len(tc.expScaleTargets.targets), len(res.targets))
+			continue
+		}
+		for idx := 1; idx <= len(res.targets); idx++ {
+			if res.targets[0].kind != tc.expScaleTargets.targets[0].kind ||
+				res.targets[0].name != tc.expScaleTargets.targets[0].name {
+				t.Errorf("Expect kind: %v, name: %v\ngot kind: %v, name: %v", tc.expScaleTargets.targets[0].kind,
+					tc.expScaleTargets.targets[0].name, res.targets[0].kind, res.targets[0].name)
+			}
 		}
 	}
 }
