@@ -43,6 +43,10 @@ func TestIsTargetFormatValid(t *testing.T) {
 			true,
 		},
 		{
+			"DeplOymEnT/anything, replicaset/anything,replicationcontroller/anything",
+			true,
+		},
+		{
 			"deployments/anything",
 			false,
 		},

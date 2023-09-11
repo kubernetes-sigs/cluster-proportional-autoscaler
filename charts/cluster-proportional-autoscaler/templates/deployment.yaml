@@ -1,7 +1,4 @@
-{{- $target := default "" .Values.options.target }}
-{{- if and (and (not (hasPrefix "deployment/" $target)) (not (hasPrefix "replicationcontroller/" $target))) (not (hasPrefix "replicaset/" $target)) }}
-{{ fail "options.target must be one of deployment, replicationcontroller, or replicaset" }}
-{{- end }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,7 +37,7 @@ spec:
             - --configmap={{ include "cluster-proportional-autoscaler.fullname" . }}
             - --logtostderr={{ ternary true false (not (empty .Values.options.logToStdErr)) }}
             - --namespace={{ default .Release.Namespace .Values.options.namespace }}
-            - --target={{- required "options.target must be specified" $target }}
+            - --target={{- required "options.target must be specified" .Values.options.target }}
             - --v={{ .Values.options.logLevel | int }}
             {{- with ternary true false (not (empty .Values.options.alsoLogToStdErr)) }}
             - --alsologtostderr={{ . }}
