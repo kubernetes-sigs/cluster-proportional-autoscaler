@@ -136,7 +136,7 @@ type target struct {
 	name string
 }
 
-// scaleTargets stores the scalable target recourses
+// scaleTargets stores the scalable target resources
 type scaleTargets struct {
 	targets   []target
 	namespace string
