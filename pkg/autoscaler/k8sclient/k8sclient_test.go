@@ -116,7 +116,7 @@ func TestGetScaleTarget(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		res, err := getScaleTarget(tc.target, "default")
+		res, err := getScaleTargets(tc.target, "default")
 		if err != nil && !tc.expError {
 			t.Errorf("Expect no error, got error for target: %v", tc.target)
 			continue
