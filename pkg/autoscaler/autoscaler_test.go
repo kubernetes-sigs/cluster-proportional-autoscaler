@@ -17,6 +17,7 @@ limitations under the License.
 package autoscaler
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -243,7 +244,7 @@ func TestRun_MaxRetries(t *testing.T) {
 	<-readyCh
 	for i := 0; i < maxRetries; i++ {
 		fakeClock.Step(fakePollPeriod)
-		wait.Poll(50*time.Millisecond, 3*time.Second, func() (done bool, err error) {
+		_ = wait.PollUntilContextTimeout(context.TODO(), 50*time.Millisecond, 3*time.Second, false, func(ctx context.Context) (done bool, err error) {
 			return true, nil
 		})
 	}
@@ -257,7 +258,7 @@ func TestRun_MaxRetries(t *testing.T) {
 }
 
 func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient, replicas int) error {
-	return wait.Poll(50*time.Millisecond, 3*time.Second, func() (done bool, err error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 50*time.Millisecond, 3*time.Second, false, func(ctx context.Context) (done bool, err error) {
 		if mockK8s.NumOfReplicas != replicas {
 			t.Logf("Error number of replicas, expected: %d, got %d\n", replicas, mockK8s.NumOfReplicas)
 			return false, nil

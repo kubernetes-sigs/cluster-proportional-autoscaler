@@ -175,7 +175,7 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	// reflector can't initialize. That is a tradeoff between silently non-working
 	// component and explicit restarts of it. In majority of the cases the restart
 	// won't repair it - though it may give better visibility into problems.
-	err = wait.PollImmediate(250*time.Millisecond, 5*time.Second, func() (bool, error) {
+	err = wait.PollUntilContextTimeout(context.TODO(), 250*time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
 		if k.reflector.LastSyncResourceVersion() == "" {
 			return false, nil
 		}

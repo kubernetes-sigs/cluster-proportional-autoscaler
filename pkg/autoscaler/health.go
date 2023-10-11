@@ -69,7 +69,7 @@ func (hs *httpHealthServer) Start() {
 func (hs *httpHealthServer) lastPollFn(w http.ResponseWriter, req *http.Request) {
 	if err := hs.lastPollCycleHealth.getLastPollError(); err != nil {
 		w.WriteHeader(500)
-		w.Write([]byte(fmt.Sprintf("Encountered error at last poll cycle: %v", err)))
+		_, _ = w.Write([]byte(fmt.Sprintf("Encountered error at last poll cycle: %v", err)))
 		return
 	}
 }
