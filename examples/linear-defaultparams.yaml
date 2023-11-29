@@ -51,7 +51,7 @@ spec:
         app: autoscaler
     spec:
       containers:
-        - image: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:{LATEST_RELEASE}
+        - image: registry.k8s.io/cpa/cluster-proportional-autoscaler-amd64:{LATEST_RELEASE}
           name: autoscaler
           command:
             - /cluster-proportional-autoscaler
