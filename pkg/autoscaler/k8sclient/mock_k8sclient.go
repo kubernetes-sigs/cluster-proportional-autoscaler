@@ -69,8 +69,7 @@ func (k *MockK8sClient) GetNamespace() string {
 }
 
 // UpdateReplicas mocks updating the number of replicas for the resource and return the previous replicas count
-func (k *MockK8sClient) UpdateReplicas(expReplicas int32) (int32, error) {
-	prevReplicas := int32(k.NumOfReplicas)
+func (k *MockK8sClient) UpdateReplicas(expReplicas int32) error {
 	k.NumOfReplicas = int(expReplicas)
-	return prevReplicas, nil
+	return nil
 }
