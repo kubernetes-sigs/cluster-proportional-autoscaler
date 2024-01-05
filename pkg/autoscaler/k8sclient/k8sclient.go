@@ -209,10 +209,10 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	return clusterStatus, nil
 }
 
-func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err error) {
-	prevRelicas, err = k.updateReplicasAppsV1(expReplicas)
+func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevReplicas int32, err error) {
+	prevReplicas, err = k.updateReplicasAppsV1(expReplicas)
 	if err == nil || !apierrors.IsForbidden(err) {
-		return prevRelicas, err
+		return prevReplicas, err
 	}
 	glog.V(1).Infof("Falling back to extensions/v1beta1, error using apps/v1: %v", err)
 
@@ -221,17 +221,17 @@ func (k *k8sClient) UpdateReplicas(expReplicas int32) (prevRelicas int32, err er
 	if err != nil {
 		return 0, err
 	}
-	prevRelicas = scale.Spec.Replicas
-	if expReplicas != prevRelicas {
+	prevReplicas = scale.Spec.Replicas
+	if expReplicas != prevReplicas {
 		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.TotalNodes, k.clusterStatus.SchedulableCores, k.clusterStatus.TotalCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
+		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevReplicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
 		_, err = k.updateScaleExtensionsV1beta1(k.target, scale)
 		if err != nil {
 			return 0, err
 		}
 	}
-	return prevRelicas, nil
+	return prevReplicas, nil
 }
 
 func (k *k8sClient) getScaleExtensionsV1beta1(target *scaleTarget) (*extensionsv1beta1.Scale, error) {
@@ -257,7 +257,7 @@ func (k *k8sClient) updateScaleExtensionsV1beta1(target *scaleTarget, scale *ext
 	}
 }
 
-func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, err error) {
+func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevReplicas int32, err error) {
 	req, err := requestForTarget(k.clientset.AppsV1().RESTClient().Get(), k.target)
 	if err != nil {
 		return 0, err
@@ -268,10 +268,10 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, 
 		return 0, err
 	}
 
-	prevRelicas = scale.Spec.Replicas
-	if expReplicas != prevRelicas {
+	prevReplicas = scale.Spec.Replicas
+	if expReplicas != prevReplicas {
 		glog.V(0).Infof("Cluster status: SchedulableNodes[%v], SchedulableCores[%v]", k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
-		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevRelicas, expReplicas)
+		glog.V(0).Infof("Replicas are not as expected : updating replicas from %d to %d", prevReplicas, expReplicas)
 		scale.Spec.Replicas = expReplicas
 		req, err = requestForTarget(k.clientset.AppsV1().RESTClient().Put(), k.target)
 		if err != nil {
@@ -282,7 +282,7 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32) (prevRelicas int32, 
 		}
 	}
 
-	return prevRelicas, nil
+	return prevReplicas, nil
 }
 
 func requestForTarget(req *rest.Request, target *scaleTarget) (*rest.Request, error) {
