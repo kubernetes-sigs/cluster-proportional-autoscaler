@@ -6,10 +6,10 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/golang/glog v1.2.0
 	github.com/spf13/pflag v1.0.5
-	k8s.io/api v0.29.1
-	k8s.io/apimachinery v0.29.1
-	k8s.io/client-go v0.29.1
-	k8s.io/component-base v0.29.1
+	k8s.io/api v0.29.2
+	k8s.io/apimachinery v0.29.2
+	k8s.io/client-go v0.29.2
+	k8s.io/component-base v0.29.2
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 )
 
