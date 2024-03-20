@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+
+	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
 
 func verifyParams(t *testing.T, scalerParams, expScalerParams *ladderParams) {
@@ -73,6 +75,7 @@ func TestControllerParser(t *testing.T) {
 			true,
 			&ladderParams{},
 		},
+		// IncludeUnschedulableNodes must default to false for backwards compatibility.
 		{
 			`{
 				"coresToReplicas":
@@ -115,6 +118,40 @@ func TestControllerParser(t *testing.T) {
 					{65535, 100},
 					{32768, 80},
 				},
+				IncludeUnschedulableNodes: false,
+			},
+		},
+		{
+			`{
+				"coresToReplicas":
+				[
+					[0, 0],
+					[1, 0],
+					[2, 2],
+					[3, 3]
+				],
+				"nodesToReplicas":
+				[
+					[1, 1],
+					[2, 2],
+					[3, 3]
+				],
+				"includeUnschedulableNodes": true
+			}`,
+			false,
+			&ladderParams{
+				CoresToReplicas: []paramEntry{
+					{0, 0},
+					{1, 0},
+					{2, 2},
+					{3, 3},
+				},
+				NodesToReplicas: []paramEntry{
+					{1, 1},
+					{2, 2},
+					{3, 3},
+				},
+				IncludeUnschedulableNodes: true,
 			},
 		},
 	}
@@ -296,6 +333,69 @@ func TestControllerScalerFromZero(t *testing.T) {
 		}
 		if replicas := getExpectedReplicasFromEntries(tc.numResources, testEntriesFromOne); tc.expReplicas != replicas {
 			t.Errorf("Scaler Lookup failed Expected %d, Got %d", tc.expReplicas, replicas)
+		}
+	}
+}
+
+func TestScaleFromUnschedulableNodes(t *testing.T) {
+	nodesToReplicas := []paramEntry{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+		{3, 3},
+	}
+	coresToReplicas := []paramEntry{
+		{0, 0},
+		{4, 1},
+		{8, 2},
+		{12, 3},
+	}
+
+	testcases := []struct {
+		clusterStatus           *k8sclient.ClusterStatus
+		expectedReplicas        int32
+		includeSchedulableNodes bool
+	}{
+		{
+			clusterStatus: &k8sclient.ClusterStatus{
+				TotalNodes:       3,
+				SchedulableNodes: 2,
+				TotalCores:       12,
+				SchedulableCores: 8,
+			},
+			expectedReplicas:        3,
+			includeSchedulableNodes: true,
+		},
+		{
+			clusterStatus: &k8sclient.ClusterStatus{
+				TotalNodes:       3,
+				SchedulableNodes: 1,
+				TotalCores:       12,
+				SchedulableCores: 4,
+			},
+			expectedReplicas:        1,
+			includeSchedulableNodes: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		c := &LadderController{
+			params: &ladderParams{
+				CoresToReplicas:           coresToReplicas,
+				NodesToReplicas:           nodesToReplicas,
+				IncludeUnschedulableNodes: tc.includeSchedulableNodes,
+			},
+		}
+		actualReplicas, err := c.GetExpectedReplicas(tc.clusterStatus)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+			spew.Dump(tc)
+			continue
+		}
+		if tc.expectedReplicas != actualReplicas {
+			t.Errorf("ScaleFromUnschedulableNodes failed Expected %d, Got %d", tc.expectedReplicas, actualReplicas)
+			spew.Dump(tc)
+			continue
 		}
 	}
 }

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sort"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller"
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
@@ -64,8 +64,9 @@ func (entries paramEntries) Swap(i, j int) {
 }
 
 type ladderParams struct {
-	CoresToReplicas paramEntries `json:"coresToReplicas"`
-	NodesToReplicas paramEntries `json:"nodesToReplicas"`
+	CoresToReplicas           paramEntries `json:"coresToReplicas"`
+	NodesToReplicas           paramEntries `json:"nodesToReplicas"`
+	IncludeUnschedulableNodes bool         `json:"includeUnschedulableNodes"`
 }
 
 func (c *LadderController) SyncConfig(configMap *v1.ConfigMap) error {
@@ -112,15 +113,21 @@ func (c *LadderController) GetParamsVersion() string {
 }
 
 func (c *LadderController) GetExpectedReplicas(status *k8sclient.ClusterStatus) (int32, error) {
-	// Get the expected replicas for the currently schedulable nodes and cores
-	expReplicas := int32(c.getExpectedReplicasFromParams(int(status.SchedulableNodes), int(status.SchedulableCores)))
+	var expReplicas int32
+	if c.params.IncludeUnschedulableNodes {
+		// Get the expected replicas for the total nodes and cores
+		expReplicas = int32(c.getExpectedReplicasFromParams(int(status.TotalNodes), int(status.TotalCores)))
+	} else {
+		// Get the expected replicas for the currently schedulable nodes and cores
+		expReplicas = int32(c.getExpectedReplicasFromParams(int(status.SchedulableNodes), int(status.SchedulableCores)))
+	}
 
 	return expReplicas, nil
 }
 
-func (c *LadderController) getExpectedReplicasFromParams(schedulableNodes, schedulableCores int) int {
-	replicasFromCore := getExpectedReplicasFromEntries(schedulableCores, c.params.CoresToReplicas)
-	replicasFromNode := getExpectedReplicasFromEntries(schedulableNodes, c.params.NodesToReplicas)
+func (c *LadderController) getExpectedReplicasFromParams(nodes, cores int) int {
+	replicasFromCore := getExpectedReplicasFromEntries(cores, c.params.CoresToReplicas)
+	replicasFromNode := getExpectedReplicasFromEntries(nodes, c.params.NodesToReplicas)
 
 	// Returns the results which yields the most replicas
 	if replicasFromCore > replicasFromNode {
@@ -129,7 +136,7 @@ func (c *LadderController) getExpectedReplicasFromParams(schedulableNodes, sched
 	return replicasFromNode
 }
 
-func getExpectedReplicasFromEntries(schedulableResources int, entries []paramEntry) int {
+func getExpectedReplicasFromEntries(resources int, entries []paramEntry) int {
 	if len(entries) == 0 {
 		return 0
 	}
@@ -137,7 +144,7 @@ func getExpectedReplicasFromEntries(schedulableResources int, entries []paramEnt
 	pos := sort.Search(
 		len(entries),
 		func(i int) bool {
-			return schedulableResources < entries[i][0]
+			return resources < entries[i][0]
 		})
 	if pos > 0 {
 		pos = pos - 1

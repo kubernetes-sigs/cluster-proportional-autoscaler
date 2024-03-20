@@ -58,7 +58,7 @@ spec:
             - --namespace=default
             - --configmap=nginx-autoscaler
             - --target=deployment/nginx-autoscale-example
-            - --default-params={"ladder":{"coresToReplicas":[[1, 1],[2, 2],[3, 4],[512, 5]],"nodesToReplicas":[[ 1,1 ],[ 2,2 ]]}}
+            - --default-params={"ladder":{"coresToReplicas":[[1, 1],[2, 2],[3, 4],[512, 5]],"nodesToReplicas":[[ 1,1 ],[ 2,2 ]],"includeUnschedulableNodes":"true"}}
             - --logtostderr=true
             - --v=2
       # Uncomment below line if you are using RBAC configs under the RBAC folder.

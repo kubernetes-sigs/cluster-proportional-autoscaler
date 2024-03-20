@@ -135,7 +135,8 @@ data:
       [
         [ 1, 1 ],
         [ 2, 2 ]
-      ]
+      ],
+      "includeUnschedulableNodes": false
     }
 ```
 
@@ -148,8 +149,12 @@ The replicas derived from "cores_to_replicas_map" would be `3` (because `64` < `
 The replicas derived from "nodes_to_replicas_map" would be `2` (because `100` > `2`).
 And we would choose the larger one `3`.
 
+When `includeUnschedulableNodes` is set to `true`, the replicas will scale based on total number of nodes or cores.
+Otherwise, the replicas will only scale based on the number of schedulable nodes (i.e., cordoned and draining nodes are
+excluded.)
+
 Either one of the `coresToReplicas` or `nodesToReplicas` could be omitted. All elements in them should
-be int.
+be int. `includeUnschedulableNodes` will default to `false`.
 
 Replicas can be set to 0 (unlike in linear mode).
 
