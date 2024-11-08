@@ -21,6 +21,8 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/utils/clock"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
@@ -49,7 +51,17 @@ type AutoScaler struct {
 
 // NewAutoScaler returns a new AutoScaler
 func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
-	newK8sClient, err := k8sclient.NewK8sClient(c.Namespace, c.Target, c.NodeLabels)
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	// Use protobufs for communication with apiserver.
+	config.ContentType = "application/vnd.kubernetes.protobuf"
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	newK8sClient, err := k8sclient.NewK8sClient(clientset, c.Namespace, c.Target, c.NodeLabels)
 	if err != nil {
 		return nil, err
 	}

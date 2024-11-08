@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	v1 "k8s.io/api/core/v1"
@@ -28,12 +27,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/golang/glog"
 )
@@ -57,53 +55,55 @@ type K8sClient interface {
 // k8sClient - Wraps all Kubernetes API client functionalities
 type k8sClient struct {
 	target        *scaleTarget
-	clientset     *kubernetes.Clientset
+	clientset     kubernetes.Interface
 	clusterStatus *ClusterStatus
-	nodeStore     cache.Store
-	reflector     *cache.Reflector
+	nodeLister    corelisters.NodeLister
 	stopCh        chan struct{}
 }
 
+func getTrimmedNodeClients(clientset kubernetes.Interface, labelOptions informers.SharedInformerOption) (informers.SharedInformerFactory, corelisters.NodeLister) {
+	factory := informers.NewSharedInformerFactoryWithOptions(clientset, 0, labelOptions)
+	nodeInformer := factory.Core().V1().Nodes().Informer()
+	nodeInformer.SetTransform(func(obj any) (any, error) {
+		// Trimming unneeded fields to reduce memory consumption under large-scale.
+		if node, ok := obj.(*v1.Node); ok {
+			node.ObjectMeta = metav1.ObjectMeta{
+				Name: node.Name,
+			}
+			node.Spec = v1.NodeSpec{
+				Unschedulable: node.Spec.Unschedulable,
+			}
+			node.Status = v1.NodeStatus{
+				Allocatable: node.Status.Allocatable,
+			}
+		}
+		return obj, nil
+	})
+	nodeLister := factory.Core().V1().Nodes().Lister()
+	return factory, nodeLister
+}
+
 // NewK8sClient gives a k8sClient with the given dependencies.
-func NewK8sClient(namespace, target string, nodelabels string) (K8sClient, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, err
-	}
-	// Use protobufs for communication with apiserver.
-	config.ContentType = "application/vnd.kubernetes.protobuf"
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
+func NewK8sClient(clientset kubernetes.Interface, namespace, target string, nodelabels string) (K8sClient, error) {
+	// Start the informer to list and watch nodes.
+	stopCh := make(chan struct{})
+	labelOptions := informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+		opts.LabelSelector = nodelabels
+	})
+	factory, nodeLister := getTrimmedNodeClients(clientset, labelOptions)
+	factory.Start(stopCh)
+	factory.WaitForCacheSync(stopCh)
 
 	scaleTarget, err := getScaleTarget(target, namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	// Start propagating contents of the nodeStore.
-	nodeListWatch := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			options.LabelSelector = nodelabels
-			return clientset.CoreV1().Nodes().List(context.TODO(), options)
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			options.LabelSelector = nodelabels
-			return clientset.CoreV1().Nodes().Watch(context.TODO(), options)
-		},
-	}
-	nodeStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
-	reflector := cache.NewReflector(nodeListWatch, &v1.Node{}, nodeStore, 0)
-	stopCh := make(chan struct{})
-	go reflector.Run(stopCh)
-
 	return &k8sClient{
-		target:    scaleTarget,
-		clientset: clientset,
-		nodeStore: nodeStore,
-		reflector: reflector,
-		stopCh:    stopCh,
+		target:     scaleTarget,
+		clientset:  clientset,
+		nodeLister: nodeLister,
+		stopCh:     stopCh,
 	}, nil
 }
 
@@ -171,31 +171,16 @@ type ClusterStatus struct {
 }
 
 func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error) {
-	// TODO: Consider moving this to NewK8sClient method and failing fast when
-	// reflector can't initialize. That is a tradeoff between silently non-working
-	// component and explicit restarts of it. In majority of the cases the restart
-	// won't repair it - though it may give better visibility into problems.
-	err = wait.PollUntilContextTimeout(context.TODO(), 250*time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
-		if k.reflector.LastSyncResourceVersion() == "" {
-			return false, nil
-		}
-		return true, nil
-	})
+	nodes, err := k.nodeLister.List(labels.NewSelector())
 	if err != nil {
 		return nil, err
 	}
-	nodes := k.nodeStore.List()
 
 	clusterStatus = &ClusterStatus{}
 	clusterStatus.TotalNodes = int32(len(nodes))
 	var tc resource.Quantity
 	var sc resource.Quantity
-	for i := range nodes {
-		node, ok := nodes[i].(*v1.Node)
-		if !ok {
-			glog.Errorf("Unexpected object: %#v", nodes[i])
-			continue
-		}
+	for _, node := range nodes {
 		tc.Add(node.Status.Allocatable[v1.ResourceCPU])
 		if !node.Spec.Unschedulable {
 			clusterStatus.SchedulableNodes++
