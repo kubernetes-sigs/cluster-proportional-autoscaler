@@ -248,7 +248,10 @@ func TestGetTrimmedNodeClients(t *testing.T) {
 
 	// Start the informer.
 	labelOptions := informers.WithTweakListOptions(func(opts *metav1.ListOptions) {})
-	factory, nodelister := getTrimmedNodeClients(client, labelOptions)
+	factory, nodelister, err := getTrimmedNodeClients(client, labelOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
 	stopCh := make(chan struct{})
 	factory.Start(stopCh)
 	factory.WaitForCacheSync(stopCh)

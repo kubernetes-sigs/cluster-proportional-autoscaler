@@ -61,10 +61,10 @@ type k8sClient struct {
 	stopCh        chan struct{}
 }
 
-func getTrimmedNodeClients(clientset kubernetes.Interface, labelOptions informers.SharedInformerOption) (informers.SharedInformerFactory, corelisters.NodeLister) {
+func getTrimmedNodeClients(clientset kubernetes.Interface, labelOptions informers.SharedInformerOption) (informers.SharedInformerFactory, corelisters.NodeLister, error) {
 	factory := informers.NewSharedInformerFactoryWithOptions(clientset, 0, labelOptions)
 	nodeInformer := factory.Core().V1().Nodes().Informer()
-	nodeInformer.SetTransform(func(obj any) (any, error) {
+	err := nodeInformer.SetTransform(func(obj any) (any, error) {
 		// Trimming unneeded fields to reduce memory consumption under large-scale.
 		if node, ok := obj.(*v1.Node); ok {
 			node.ObjectMeta = metav1.ObjectMeta{
@@ -79,8 +79,11 @@ func getTrimmedNodeClients(clientset kubernetes.Interface, labelOptions informer
 		}
 		return obj, nil
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 	nodeLister := factory.Core().V1().Nodes().Lister()
-	return factory, nodeLister
+	return factory, nodeLister, nil
 }
 
 // NewK8sClient gives a k8sClient with the given dependencies.
@@ -90,7 +93,10 @@ func NewK8sClient(clientset kubernetes.Interface, namespace, target string, node
 	labelOptions := informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
 		opts.LabelSelector = nodelabels
 	})
-	factory, nodeLister := getTrimmedNodeClients(clientset, labelOptions)
+	factory, nodeLister, err := getTrimmedNodeClients(clientset, labelOptions)
+	if err != nil {
+		return nil, err
+	}
 	factory.Start(stopCh)
 	factory.WaitForCacheSync(stopCh)
 
