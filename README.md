@@ -22,7 +22,7 @@ Usage of cluster-proportional-autoscaler:
       --namespace="": Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.
       --poll-period-seconds=10: The time, in seconds, to check cluster status and perform autoscale.
       --stderrthreshold=2: logs at or above this threshold go to stderr
-      --target="": Target to scale. In format: deployment/*, replicationcontroller/* or replicaset/* (not case sensitive).
+      --target="": Targets to scale. In format: 'deployment/*,replicationcontroller/*,replicaset/*' (not case sensitive, comma delimiter supported).
       --v=0: log level for V logs
       --version[=false]: Print the version and exit.
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
@@ -171,6 +171,23 @@ data:
         [ 6, 1 ]
       ]
     }
+```
+
+## Multi-target support
+
+This container provides the configuration parameters for defining the `target` on which the cluster-proportional-autoscaler
+will apply the corresponding scaling control pattern.
+
+The supported k8s workloads for scaling are `deployment`, `replicationcontroller` and `replicaset`.
+
+A single cluster-proportional-autoscale is capable of handling multiple targets by setting the `--target` param.
+
+***Note:*** the k8s workloads should be under the namespace configured from the `--namespace` flag.
+
+```
+    ...
+    --target="deployment/first,deployment/second"
+    ...
 ```
 
 ## Comparisons to the Horizontal Pod Autoscaler feature
