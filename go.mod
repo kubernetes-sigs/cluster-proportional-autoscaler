@@ -1,10 +1,9 @@
 module github.com/kubernetes-sigs/cluster-proportional-autoscaler
 
 go 1.23
-
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
-	github.com/golang/glog v1.2.3
+	github.com/golang/glog v1.2.4
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
