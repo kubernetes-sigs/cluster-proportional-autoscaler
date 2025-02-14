@@ -107,7 +107,7 @@ Otherwise, the replicas will only scale based on the number of schedulable nodes
 excluded.)
 
 Either one of the `coresPerReplica` or `nodesPerReplica` could be omitted. All of  `min`, `max`,
-`preventSinglePointFailure` and `includeUnscheduleableNodes` are optional. If not set, `min` would be default to `1`,
+`preventSinglePointFailure` and `includeUnschedulableNodes` are optional. If not set, `min` would be default to `1`,
 `preventSinglePointFailure` will be default to `false` and `includeUnschedulableNodes` will be default to `false`.
 
 Side notes:
