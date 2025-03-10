@@ -1,3 +1,11 @@
+### Version 1.9.0 (Tue Nov 22 2024 Zihong Zheng <zihongz@google.com>)
+ - A scalability improvement to reduce memory footprint under large-scale scenarios.
+ - Pickup latest CVE fixes.
+ - Update dependencies version (golang, k8s, etc.).
+
+### Version 1.8.9 (Tue Jul 29 2023 Zihong Zheng <zihongz@google.com>)
+ - Fix options provided to CPA's Nodes List and Watch requests.
+
 ### Version 1.8.8 (Tue Mar 28 2023 Zihong Zheng <zihongz@google.com>)
  - Support custom priorityClassName in the helm chart.
  - Update go dependencies.
