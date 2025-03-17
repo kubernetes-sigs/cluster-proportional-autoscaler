@@ -5,11 +5,11 @@ go 1.24
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/golang/glog v1.2.4
-	github.com/spf13/pflag v1.0.5
-	k8s.io/api v0.32.1
-	k8s.io/apimachinery v0.32.1
-	k8s.io/client-go v0.32.1
-	k8s.io/component-base v0.32.1
+	github.com/spf13/pflag v1.0.6
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
+	k8s.io/client-go v0.32.3
+	k8s.io/component-base v0.32.3
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 )
 
