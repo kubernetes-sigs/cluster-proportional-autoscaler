@@ -75,6 +75,7 @@ func getTrimmedNodeClients(clientset kubernetes.Interface, labelOptions informer
 			}
 			node.Status = v1.NodeStatus{
 				Allocatable: node.Status.Allocatable,
+				Conditions:  node.Status.Conditions,
 			}
 		}
 		return obj, nil
@@ -194,6 +195,16 @@ type ClusterStatus struct {
 	SchedulableCores int32
 }
 
+// isNodeReady checks if a node is in the "Ready" state.
+func isNodeReady(node *v1.Node) bool {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady && condition.Status == v1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
 func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error) {
 	nodes, err := k.nodeLister.List(labels.NewSelector())
 	if err != nil {
@@ -206,7 +217,7 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 	var sc resource.Quantity
 	for _, node := range nodes {
 		tc.Add(node.Status.Allocatable[v1.ResourceCPU])
-		if !node.Spec.Unschedulable {
+		if !node.Spec.Unschedulable && isNodeReady(node) {
 			clusterStatus.SchedulableNodes++
 			sc.Add(node.Status.Allocatable[v1.ResourceCPU])
 		}
