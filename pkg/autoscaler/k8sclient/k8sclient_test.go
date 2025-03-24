@@ -155,6 +155,14 @@ func TestNewK8sClient(t *testing.T) {
 	q2, _ := resource.ParseQuantity("2000m")
 	q3, _ := resource.ParseQuantity("3000m")
 	q4, _ := resource.ParseQuantity("4000m")
+
+	readyConditions := []v1.NodeCondition{
+		{Type: v1.NodeReady, Status: v1.ConditionTrue},
+	}
+	notReadyConditions := []v1.NodeCondition{
+		{Type: v1.NodeReady, Status: v1.ConditionFalse},
+	}
+
 	testNode1 := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node-1",
@@ -174,7 +182,8 @@ func TestNewK8sClient(t *testing.T) {
 			Allocatable: v1.ResourceList{
 				v1.ResourceCPU: q1,
 			},
-			Phase: v1.NodeRunning,
+			Phase:      v1.NodeRunning,
+			Conditions: readyConditions,
 		},
 	}
 	testNode2 := &v1.Node{
@@ -196,7 +205,8 @@ func TestNewK8sClient(t *testing.T) {
 			Allocatable: v1.ResourceList{
 				v1.ResourceCPU: q2,
 			},
-			Phase: v1.NodeRunning,
+			Phase:      v1.NodeRunning,
+			Conditions: readyConditions,
 		},
 	}
 	// testNode3 has Unschedulable set to true.
@@ -245,21 +255,36 @@ func TestNewK8sClient(t *testing.T) {
 			Phase: v1.NodeRunning,
 		},
 	}
-	_, err := client.CoreV1().Nodes().Create(context.Background(), testNode1, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatal(err)
+	// testNode5 has Unschedulable set to false, but it's not Ready according to Status.Conditions.
+	testNode5 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-5",
+			Labels: map[string]string{
+				"app": "autoscaler",
+			},
+			Annotations: map[string]string{
+				"eating-memory": "a-lot",
+				"oom":           "on-the-way",
+			},
+		},
+		Spec: v1.NodeSpec{
+			Unschedulable: false,
+			PodCIDR:       "10.0.3.0/24",
+		},
+		Status: v1.NodeStatus{
+			Allocatable: v1.ResourceList{
+				v1.ResourceCPU: q3,
+			},
+			Phase:      v1.NodeRunning,
+			Conditions: notReadyConditions,
+		},
 	}
-	_, err = client.CoreV1().Nodes().Create(context.Background(), testNode2, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.CoreV1().Nodes().Create(context.Background(), testNode3, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.CoreV1().Nodes().Create(context.Background(), testNode4, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatal(err)
+
+	for _, node := range []*v1.Node{testNode1, testNode2, testNode3, testNode4, testNode5} {
+		_, err := client.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	k8sClient, err := NewK8sClient(client, "test-namespace", "deployment/test-target", nodeLabels)
@@ -270,13 +295,13 @@ func TestNewK8sClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.TotalNodes != 3 {
+	if status.TotalNodes != 4 {
 		t.Errorf("status.TotalNodes=%v, want 3", status.TotalNodes)
 	}
 	if status.SchedulableNodes != 2 {
 		t.Errorf("status.SchedulableNodes=%v, want 2", status.SchedulableNodes)
 	}
-	if status.TotalCores != 6 {
+	if status.TotalCores != 9 {
 		t.Errorf("status.TotalCores=%v, want 6", status.TotalCores)
 	}
 	if status.SchedulableCores != 3 {
