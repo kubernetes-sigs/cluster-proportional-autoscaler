@@ -23,6 +23,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/utils/clock"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
@@ -51,7 +52,7 @@ type AutoScaler struct {
 
 // NewAutoScaler returns a new AutoScaler
 func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
-	config, err := rest.InClusterConfig()
+	config, err := buildKubeconfig(c.KubeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +81,23 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 		maxSyncFailures:     c.MaxSyncFailures,
 		exitFn:              func() { os.Exit(1) },
 	}, nil
+}
+
+// buildKubeConfig returns a *rest.Config in following order:
+// 1. Builds a *rest.Config from a kubeconfig path.
+// 2. Builds a *rest.Config from in-cluster config.
+// 3. Builds a *rest.Config from the default client-go loading rules.
+func buildKubeconfig(kubeConfigPath string) (*rest.Config, error) {
+	if kubeConfigPath != "" {
+		return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	}
+	if cfg, err := rest.InClusterConfig(); err == nil {
+		return cfg, nil
+	}
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		loadingRules, &clientcmd.ConfigOverrides{},
+	).ClientConfig()
 }
 
 // Run periodically counts the number of nodes and cores, estimates the expected
