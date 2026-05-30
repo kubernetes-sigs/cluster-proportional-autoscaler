@@ -19,6 +19,8 @@ package autoscaler
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -30,6 +32,25 @@ import (
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/linearcontroller"
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/k8sclient"
 )
+
+const validKubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- name: local
+  cluster:
+    server: https://127.0.0.1:6443
+    insecure-skip-tls-verify: true
+contexts:
+- name: local
+  context:
+    cluster: local
+    user: local
+users:
+- name: local
+  user:
+    token: test-token
+current-context: local
+`
 
 func TestRun(t *testing.T) {
 	testConfigMap := v1.ConfigMap{
@@ -257,6 +278,44 @@ func TestRun_MaxRetries(t *testing.T) {
 	}
 }
 
+func TestBuidKubeConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := writeKubeConfig(t, tmpDir, validKubeconfig)
+	isolateKubeEnv(t, filepath.Join(t.TempDir(), "does-not-exist"))
+
+	cfg, err := buildKubeconfig(path)
+	if err != nil {
+		t.Fatalf("failed to build kubeconfig %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("expected non-nil rest.Config")
+	}
+	if cfg.Host != "https://127.0.0.1:6443" {
+		t.Errorf("unexpected host: got %q, expected %q", cfg.Host, "https://127.0.0.1:6443")
+	}
+	if cfg.BearerToken != "test-token" {
+		t.Errorf("unexpected bearer token: got %q, expected %q", cfg.BearerToken, "test-token")
+	}
+}
+
+// isolateKubeEnv prevents tests from accidently picking in-cluster service account
+// or the developers real kubeconfig
+func isolateKubeEnv(t *testing.T, kubeConfigEnv string) {
+	t.Helper()
+	t.Setenv("KUBECONFIG", kubeConfigEnv)
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("KUBERNETES_SERVICE_PORT", "")
+}
+
+// writeKubeonfig writes the provided kubeconfig to provided path
+func writeKubeConfig(t *testing.T, dir, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, "config")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write kubeconfig: %v", err)
+	}
+	return path
+}
 func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient, replicas int) error {
 	return wait.PollUntilContextTimeout(context.TODO(), 50*time.Millisecond, 3*time.Second, false, func(ctx context.Context) (done bool, err error) {
 		if mockK8s.NumOfReplicas != replicas {
