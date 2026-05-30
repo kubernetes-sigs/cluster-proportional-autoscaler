@@ -30,6 +30,20 @@ Usage of cluster-proportional-autoscaler:
       --max-sync-failures=[0]: Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.
 ```
 
+## Running out-of-cluster
+The cluster proportional autoscaler is designed to run as a Pod, where it picks up credentiasl from the in-cluster
+serivice account. For local development, testing or running on a host that has a kubeconfig, pass `--kubeconfig` to 
+instruct cluster propportional autoscaler to use kubeconfig.
+
+```sh
+./cluster-proportional-autoscaler \
+  --kubeconfig=$HOME/.kube/config \
+  --configmap=my-autoscaler \
+  --target=deployment/my-deployment \
+  --namespace=kube-system \
+  --logtostderr
+```
+
 ## Installation with helm
 
 Add the cluster-proportional-autoscaler Helm repository:
