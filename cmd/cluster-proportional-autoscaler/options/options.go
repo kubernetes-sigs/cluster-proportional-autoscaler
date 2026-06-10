@@ -37,6 +37,7 @@ type AutoScalerConfig struct {
 	PrintVer          bool
 	NodeLabels        string
 	MaxSyncFailures   int
+	KubeConfig        string
 }
 
 // NewAutoScalerConfig returns a Autoscaler config
@@ -131,4 +132,5 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.Var(&c.DefaultParams, "default-params", "Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if ConfigMap is not present.")
 	fs.StringVar(&c.NodeLabels, "nodelabels", c.NodeLabels, "NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.")
 	fs.IntVar(&c.MaxSyncFailures, "max-sync-failures", c.MaxSyncFailures, "Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.")
+	fs.StringVar(&c.KubeConfig, "kubeconfig", c.KubeConfig, "Path to the kubeconfig file.")
 }
