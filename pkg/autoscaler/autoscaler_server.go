@@ -83,21 +83,24 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	}, nil
 }
 
-// buildKubeConfig returns a *rest.Config in following order:
-// 1. Builds a *rest.Config from a kubeconfig path.
-// 2. Builds a *rest.Config from in-cluster config.
-// 3. Builds a *rest.Config from the default client-go loading rules.
+// buildKubeConfig returns a *rest.Config
 func buildKubeconfig(kubeConfigPath string) (*rest.Config, error) {
 	if kubeConfigPath != "" {
 		return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	}
 	if cfg, err := rest.InClusterConfig(); err == nil {
 		return cfg, nil
+	} else if err != rest.ErrNotInCluster {
+		glog.V(1).Infof("in-cluster config is not usable, falling back to default loading rules: %v", err)
 	}
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		loadingRules, &clientcmd.ConfigOverrides{},
 	).ClientConfig()
+	if err != nil {
+		glog.V(1).Info("default kubeconfig loading rules failed: %v", err)
+	}
+	return cfg, err
 }
 
 // Run periodically counts the number of nodes and cores, estimates the expected
