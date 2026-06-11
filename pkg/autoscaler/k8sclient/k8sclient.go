@@ -30,8 +30,11 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/golang/glog"
 )
@@ -58,6 +61,7 @@ type k8sClient struct {
 	clientset     kubernetes.Interface
 	clusterStatus *ClusterStatus
 	nodeLister    corelisters.NodeLister
+	recorder      record.EventRecorder
 	stopCh        chan struct{}
 }
 
@@ -106,10 +110,17 @@ func NewK8sClient(clientset kubernetes.Interface, namespace, target string, node
 		return nil, err
 	}
 
+	// Create an event broadcaster and recorder to emit Kubernetes events.
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(glog.V(0).Infof)
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientset.CoreV1().Events(namespace)})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "cluster-proportional-autoscaler"})
+
 	return &k8sClient{
 		scaleTargets: scaleTargets,
 		clientset:    clientset,
 		nodeLister:   nodeLister,
+		recorder:     recorder,
 		stopCh:       stopCh,
 	}, nil
 }
@@ -231,12 +242,48 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 
 func (k *k8sClient) UpdateReplicas(expReplicas int32) (err error) {
 	for _, target := range k.scaleTargets.targets {
-		_, err := k.UpdateTargetReplicas(expReplicas, target)
+		prevReplicas, err := k.UpdateTargetReplicas(expReplicas, target)
 		if err != nil {
 			return err
 		}
+		if expReplicas != prevReplicas {
+			ref := targetObjectReference(target, k.scaleTargets.namespace)
+			k.recorder.Eventf(ref, v1.EventTypeNormal, "AutoScaling",
+				"Cluster proportional autoscaler updated replicas from %d to %d (SchedulableNodes: %d, SchedulableCores: %d)",
+				prevReplicas, expReplicas,
+				k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
+		}
 	}
 	return nil
+}
+
+// targetObjectReference builds an ObjectReference for the given scale target
+// so that events can be recorded against it.
+func targetObjectReference(t target, namespace string) *v1.ObjectReference {
+	var apiVersion, kind string
+	switch strings.ToLower(t.kind) {
+	case "deployment", "deployments":
+		apiVersion = "apps/v1"
+		kind = "Deployment"
+	case "replicaset", "replicasets":
+		apiVersion = "apps/v1"
+		kind = "ReplicaSet"
+	case "statefulset", "statefulsets":
+		apiVersion = "apps/v1"
+		kind = "StatefulSet"
+	case "replicationcontroller", "replicationcontrollers":
+		apiVersion = "v1"
+		kind = "ReplicationController"
+	default:
+		apiVersion = ""
+		kind = t.kind
+	}
+	return &v1.ObjectReference{
+		APIVersion: apiVersion,
+		Kind:       kind,
+		Name:       t.name,
+		Namespace:  namespace,
+	}
 }
 
 func (k *k8sClient) UpdateTargetReplicas(expReplicas int32, target target) (prevReplicas int32, err error) {
