@@ -20,10 +20,31 @@ package v1
 
 // ServiceAccountTokenProjectionApplyConfiguration represents a declarative configuration of the ServiceAccountTokenProjection type for use
 // with apply.
+//
+// ServiceAccountTokenProjection represents a projected service account token
+// volume. This projection can be used to insert a service account token into
+// the pods runtime filesystem for use against APIs (Kubernetes API Server or
+// otherwise).
 type ServiceAccountTokenProjectionApplyConfiguration struct {
-	Audience          *string `json:"audience,omitempty"`
-	ExpirationSeconds *int64  `json:"expirationSeconds,omitempty"`
-	Path              *string `json:"path,omitempty"`
+	// audience is the intended audience of the token. A recipient of a token
+	// must identify itself with an identifier specified in the audience of the
+	// token, and otherwise should reject the token. The audience defaults to the
+	// identifier of the apiserver.
+	Audience *string `json:"audience,omitempty"`
+	// expirationSeconds is the requested duration of validity of the service
+	// account token. As the token approaches expiration, the kubelet volume
+	// plugin will proactively rotate the service account token. The kubelet will
+	// start trying to rotate the token if the token is older than 80 percent of
+	// its time to live or if the token is older than 24 hours.Defaults to 1 hour
+	// and must be at least 10 minutes.
+	ExpirationSeconds *int64 `json:"expirationSeconds,omitempty"`
+	// path is the path relative to the mount point of the file to project the
+	// token into.
+	Path *string `json:"path,omitempty"`
+	// user is Optional: The owner UID of the created file.
+	// If specified, the item-level user field takes precedence over defaultUser.
+	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	User *int64 `json:"user,omitempty"`
 }
 
 // ServiceAccountTokenProjectionApplyConfiguration constructs a declarative configuration of the ServiceAccountTokenProjection type for use with
@@ -53,5 +74,13 @@ func (b *ServiceAccountTokenProjectionApplyConfiguration) WithExpirationSeconds(
 // If called multiple times, the Path field is set to the value of the last call.
 func (b *ServiceAccountTokenProjectionApplyConfiguration) WithPath(value string) *ServiceAccountTokenProjectionApplyConfiguration {
 	b.Path = &value
+	return b
+}
+
+// WithUser sets the User field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the User field is set to the value of the last call.
+func (b *ServiceAccountTokenProjectionApplyConfiguration) WithUser(value int64) *ServiceAccountTokenProjectionApplyConfiguration {
+	b.User = &value
 	return b
 }

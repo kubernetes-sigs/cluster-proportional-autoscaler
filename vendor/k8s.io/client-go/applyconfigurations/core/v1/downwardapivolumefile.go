@@ -20,11 +20,27 @@ package v1
 
 // DownwardAPIVolumeFileApplyConfiguration represents a declarative configuration of the DownwardAPIVolumeFile type for use
 // with apply.
+//
+// DownwardAPIVolumeFile represents information to create the file containing the pod field
 type DownwardAPIVolumeFileApplyConfiguration struct {
-	Path             *string                                  `json:"path,omitempty"`
-	FieldRef         *ObjectFieldSelectorApplyConfiguration   `json:"fieldRef,omitempty"`
+	// Required: Path is  the relative path name of the file to be created. Must not be absolute or contain the '..' path. Must be utf-8 encoded. The first item of the relative path must not start with '..'
+	Path *string `json:"path,omitempty"`
+	// Required: Selects a field of the pod: only annotations, labels, name, namespace and uid are supported.
+	FieldRef *ObjectFieldSelectorApplyConfiguration `json:"fieldRef,omitempty"`
+	// Selects a resource of the container: only resources limits and requests
+	// (limits.cpu, limits.memory, requests.cpu and requests.memory) are currently supported.
 	ResourceFieldRef *ResourceFieldSelectorApplyConfiguration `json:"resourceFieldRef,omitempty"`
-	Mode             *int32                                   `json:"mode,omitempty"`
+	// Optional: mode bits used to set permissions on this file, must be an octal value
+	// between 0000 and 0777 or a decimal value between 0 and 511.
+	// YAML accepts both octal and decimal values, JSON requires decimal values for mode bits.
+	// If not specified, the volume defaultMode will be used.
+	// This might be in conflict with other options that affect the file
+	// mode, like fsGroup, and the result can be other mode bits set.
+	Mode *int32 `json:"mode,omitempty"`
+	// user is Optional: The owner UID of the created file.
+	// If specified, the item-level user field takes precedence over defaultUser.
+	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	User *int64 `json:"user,omitempty"`
 }
 
 // DownwardAPIVolumeFileApplyConfiguration constructs a declarative configuration of the DownwardAPIVolumeFile type for use with
@@ -62,5 +78,13 @@ func (b *DownwardAPIVolumeFileApplyConfiguration) WithResourceFieldRef(value *Re
 // If called multiple times, the Mode field is set to the value of the last call.
 func (b *DownwardAPIVolumeFileApplyConfiguration) WithMode(value int32) *DownwardAPIVolumeFileApplyConfiguration {
 	b.Mode = &value
+	return b
+}
+
+// WithUser sets the User field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the User field is set to the value of the last call.
+func (b *DownwardAPIVolumeFileApplyConfiguration) WithUser(value int64) *DownwardAPIVolumeFileApplyConfiguration {
+	b.User = &value
 	return b
 }

@@ -113,13 +113,14 @@ func (DeploymentSpec) SwaggerDoc() map[string]string {
 
 var map_DeploymentStatus = map[string]string{
 	"":                    "DeploymentStatus is the most recently observed status of the Deployment.",
-	"observedGeneration":  "observedGeneration is the generation observed by the deployment controller.",
-	"replicas":            "replicas is the total number of non-terminated pods targeted by this deployment (their labels match the selector).",
-	"updatedReplicas":     "updatedReplicas is the total number of non-terminated pods targeted by this deployment that have the desired template spec.",
-	"readyReplicas":       "readyReplicas is the number of pods targeted by this Deployment controller with a Ready Condition.",
-	"availableReplicas":   "Total number of available pods (ready for at least minReadySeconds) targeted by this deployment.",
-	"unavailableReplicas": "unavailableReplicas is the total number of unavailable pods targeted by this deployment. This is the total number of pods that are still required for the deployment to have 100% available capacity. They may either be pods that are running but not yet available or pods that still have not been created.",
-	"conditions":          "Conditions represent the latest available observations of a deployment's current state.",
+	"observedGeneration":  "The generation observed by the deployment controller.",
+	"replicas":            "Total number of non-terminating pods targeted by this deployment (their labels match the selector).",
+	"updatedReplicas":     "Total number of non-terminating pods targeted by this deployment that have the desired template spec.",
+	"readyReplicas":       "Total number of non-terminating pods targeted by this Deployment with a Ready Condition.",
+	"availableReplicas":   "Total number of available non-terminating pods (ready for at least minReadySeconds) targeted by this deployment.",
+	"unavailableReplicas": "Total number of unavailable pods targeted by this deployment. This is the total number of pods that are still required for the deployment to have 100% available capacity. They may either be pods that are running but not yet available or pods that still have not been created.",
+	"terminatingReplicas": "Total number of terminating pods targeted by this deployment. Terminating pods have a non-null .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.\n\nThis is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).",
+	"conditions":          "Represents the latest available observations of a deployment's current state.",
 	"collisionCount":      "collisionCount is the count of hash collisions for the Deployment. The Deployment controller uses this field as a collision avoidance mechanism when it needs to create the name for the newest ReplicaSet.",
 }
 
@@ -159,7 +160,7 @@ func (RollingUpdateDeployment) SwaggerDoc() map[string]string {
 var map_RollingUpdateStatefulSetStrategy = map[string]string{
 	"":               "RollingUpdateStatefulSetStrategy is used to communicate parameter for RollingUpdateStatefulSetStrategyType.",
 	"partition":      "Partition indicates the ordinal at which the StatefulSet should be partitioned for updates. During a rolling update, all pods from ordinal Replicas-1 to Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched. This is helpful in being able to do a canary based deployment. The default value is 0.",
-	"maxUnavailable": "maxUnavailable is the maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding up. This can not be 0. Defaults to 1. This field is alpha-level and is only honored by servers that enable the MaxUnavailableStatefulSet feature. The field applies to all pods in the range 0 to Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it will be counted towards MaxUnavailable.",
+	"maxUnavailable": "maxUnavailable is the maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding up. This can not be 0. Defaults to 1. This field is beta-level and is enabled by default. The field applies to all pods in the range 0 to Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it will be counted towards MaxUnavailable. This setting might not be effective for the OrderedReady podManagementPolicy. That policy ensures pods are created and become ready one at a time.",
 }
 
 func (RollingUpdateStatefulSetStrategy) SwaggerDoc() map[string]string {
@@ -250,7 +251,7 @@ func (StatefulSetPersistentVolumeClaimRetentionPolicy) SwaggerDoc() map[string]s
 var map_StatefulSetSpec = map[string]string{
 	"":                                     "A StatefulSetSpec is the specification of a StatefulSet.",
 	"replicas":                             "replicas is the desired number of replicas of the given Template. These are replicas in the sense that they are instantiations of the same Template, but individual replicas also have a consistent identity. If unspecified, defaults to 1.",
-	"selector":                             "selector is a label query over pods that should match the replica count. If empty, defaulted to labels on the pod template. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
+	"selector":                             "selector is a label query over pods that should match the replica count. It must match the pod template's labels. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors",
 	"template":                             "template is the object that describes the pod that will be created if insufficient replicas are detected. Each pod stamped out by the StatefulSet will fulfill this Template, but have a unique identity from the rest of the StatefulSet. Each pod will be named with the format <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named \"web\" with index number \"3\" would be named \"web-3\".",
 	"volumeClaimTemplates":                 "volumeClaimTemplates is a list of claims that pods are allowed to reference. The StatefulSet controller is responsible for mapping network identities to claims in a way that maintains the identity of a pod. Every claim in this list must have at least one matching (by name) volumeMount in one container in the template. A claim in this list takes precedence over any volumes in the template, with the same name.",
 	"serviceName":                          "serviceName is the name of the service that governs this StatefulSet. This service must exist before the StatefulSet, and is responsible for the network identity of the set. Pods get DNS/hostnames that follow the pattern: pod-specific-string.serviceName.default.svc.cluster.local where \"pod-specific-string\" is managed by the StatefulSet controller.",
@@ -258,7 +259,7 @@ var map_StatefulSetSpec = map[string]string{
 	"updateStrategy":                       "updateStrategy indicates the StatefulSetUpdateStrategy that will be employed to update Pods in the StatefulSet when a revision is made to Template.",
 	"revisionHistoryLimit":                 "revisionHistoryLimit is the maximum number of revisions that will be maintained in the StatefulSet's revision history. The revision history consists of all revisions not represented by a currently applied StatefulSetSpec version. The default value is 10.",
 	"minReadySeconds":                      "minReadySeconds is the minimum number of seconds for which a newly created pod should be ready without any of its container crashing for it to be considered available. Defaults to 0 (pod will be considered available as soon as it is ready)",
-	"persistentVolumeClaimRetentionPolicy": "PersistentVolumeClaimRetentionPolicy describes the policy used for PVCs created from the StatefulSet VolumeClaimTemplates.",
+	"persistentVolumeClaimRetentionPolicy": "persistentVolumeClaimRetentionPolicy describes the lifecycle of persistent volume claims created from volumeClaimTemplates. By default, all persistent volume claims are created as needed and retained until manually deleted. This policy allows the lifecycle to be altered, for example by deleting persistent volume claims when their stateful set is deleted, or when their pod is scaled down.",
 	"ordinals":                             "ordinals controls the numbering of replica indices in a StatefulSet. The default ordinals behavior assigns a \"0\" index to the first replica and increments the index by one for each additional replica requested.",
 }
 

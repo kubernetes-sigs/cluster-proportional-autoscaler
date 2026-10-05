@@ -146,6 +146,11 @@ func (in *HPAScalingRules) DeepCopyInto(out *HPAScalingRules) {
 		*out = make([]HPAScalingPolicy, len(*in))
 		copy(*out, *in)
 	}
+	if in.Tolerance != nil {
+		in, out := &in.Tolerance, &out.Tolerance
+		x := (*in).DeepCopy()
+		*out = &x
+	}
 	return
 }
 
@@ -217,6 +222,11 @@ func (in *HorizontalPodAutoscalerBehavior) DeepCopy() *HorizontalPodAutoscalerBe
 func (in *HorizontalPodAutoscalerCondition) DeepCopyInto(out *HorizontalPodAutoscalerCondition) {
 	*out = *in
 	in.LastTransitionTime.DeepCopyInto(&out.LastTransitionTime)
+	if in.ObservedGeneration != nil {
+		in, out := &in.ObservedGeneration, &out.ObservedGeneration
+		*out = new(int64)
+		**out = **in
+	}
 	return
 }
 
