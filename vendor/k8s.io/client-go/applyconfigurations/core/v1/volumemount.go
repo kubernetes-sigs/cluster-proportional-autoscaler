@@ -24,14 +24,55 @@ import (
 
 // VolumeMountApplyConfiguration represents a declarative configuration of the VolumeMount type for use
 // with apply.
+//
+// VolumeMount describes a mounting of a Volume within a container.
 type VolumeMountApplyConfiguration struct {
-	Name              *string                       `json:"name,omitempty"`
-	ReadOnly          *bool                         `json:"readOnly,omitempty"`
+	// This must match the Name of a Volume.
+	Name *string `json:"name,omitempty"`
+	// Mounted read-only if true, read-write otherwise (false or unspecified).
+	// Defaults to false.
+	ReadOnly *bool `json:"readOnly,omitempty"`
+	// RecursiveReadOnly specifies whether read-only mounts should be handled
+	// recursively.
+	//
+	// If ReadOnly is false, this field has no meaning and must be unspecified.
+	//
+	// If ReadOnly is true, and this field is set to Disabled, the mount is not made
+	// recursively read-only.  If this field is set to IfPossible, the mount is made
+	// recursively read-only, if it is supported by the container runtime.  If this
+	// field is set to Enabled, the mount is made recursively read-only if it is
+	// supported by the container runtime, otherwise the pod will not be started and
+	// an error will be generated to indicate the reason.
+	//
+	// If this field is set to IfPossible or Enabled, MountPropagation must be set to
+	// None (or be unspecified, which defaults to None).
+	//
+	// If this field is not specified, it is treated as an equivalent of Disabled.
 	RecursiveReadOnly *corev1.RecursiveReadOnlyMode `json:"recursiveReadOnly,omitempty"`
-	MountPath         *string                       `json:"mountPath,omitempty"`
-	SubPath           *string                       `json:"subPath,omitempty"`
-	MountPropagation  *corev1.MountPropagationMode  `json:"mountPropagation,omitempty"`
-	SubPathExpr       *string                       `json:"subPathExpr,omitempty"`
+	// Path within the container at which the volume should be mounted.
+	MountPath *string `json:"mountPath,omitempty"`
+	// Path within the volume from which the container's volume should be mounted.
+	// Defaults to "" (volume's root).
+	SubPath *string `json:"subPath,omitempty"`
+	// mountPropagation determines how mounts are propagated from the host
+	// to container and the other way around.
+	// When not set, MountPropagationNone is used.
+	// This field is beta in 1.10.
+	// When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
+	// (which defaults to None).
+	MountPropagation *corev1.MountPropagationMode `json:"mountPropagation,omitempty"`
+	// Expanded path within the volume from which the container's volume should be mounted.
+	// Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
+	// Defaults to "" (volume's root).
+	// SubPathExpr and SubPath are mutually exclusive.
+	SubPathExpr *string `json:"subPathExpr,omitempty"`
+	// bindMountOptions is the list of additional bind mount options to apply when
+	// mounting this volume into the container. Allowed values are noexec,
+	// nodev, and nosuid. These are Linux mount options and have no effect on
+	// Windows nodes.
+	// This field is not supported with image volumes.
+	// This is an alpha field and requires enabling the VolumeBindMountOptions feature gate.
+	BindMountOptions []string `json:"bindMountOptions,omitempty"`
 }
 
 // VolumeMountApplyConfiguration constructs a declarative configuration of the VolumeMount type for use with
@@ -93,5 +134,15 @@ func (b *VolumeMountApplyConfiguration) WithMountPropagation(value corev1.MountP
 // If called multiple times, the SubPathExpr field is set to the value of the last call.
 func (b *VolumeMountApplyConfiguration) WithSubPathExpr(value string) *VolumeMountApplyConfiguration {
 	b.SubPathExpr = &value
+	return b
+}
+
+// WithBindMountOptions adds the given value to the BindMountOptions field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the BindMountOptions field.
+func (b *VolumeMountApplyConfiguration) WithBindMountOptions(values ...string) *VolumeMountApplyConfiguration {
+	for i := range values {
+		b.BindMountOptions = append(b.BindMountOptions, values[i])
+	}
 	return b
 }

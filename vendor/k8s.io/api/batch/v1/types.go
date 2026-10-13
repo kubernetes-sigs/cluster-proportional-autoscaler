@@ -18,6 +18,7 @@ package v1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	schedulingv1alpha3 "k8s.io/api/scheduling/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -66,8 +67,9 @@ const (
 // +k8s:prerelease-lifecycle-gen:introduced=1.2
 
 // Job represents the configuration of a single job.
+// +k8s:supportsSubresource="/status"
 type Job struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta `json:""`
 	// Standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
@@ -89,7 +91,7 @@ type Job struct {
 
 // JobList is a collection of jobs.
 type JobList struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta `json:""`
 	// Standard list metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
@@ -128,7 +130,6 @@ const (
 	// This is an action which might be taken on a pod failure - mark the
 	// Job's index as failed to avoid restarts within this index. This action
 	// can only be used when backoffLimitPerIndex is set.
-	// This value is beta-level.
 	PodFailurePolicyActionFailIndex PodFailurePolicyAction = "FailIndex"
 
 	// This is an action which might be taken on a pod failure - the counter towards
@@ -210,6 +211,7 @@ type PodFailurePolicyOnPodConditionsPattern struct {
 	// Specifies the required Pod condition status. To match a pod condition
 	// it is required that the specified status equals the pod condition status.
 	// Defaults to True.
+	// +optional
 	Status corev1.ConditionStatus `json:"status" protobuf:"bytes,2,req,name=status"`
 }
 
@@ -223,8 +225,6 @@ type PodFailurePolicyRule struct {
 	//   running pods are terminated.
 	// - FailIndex: indicates that the pod's index is marked as Failed and will
 	//   not be restarted.
-	//   This value is beta-level. It can be used when the
-	//   `JobBackoffLimitPerIndex` feature gate is enabled (enabled by default).
 	// - Ignore: indicates that the counter towards the .backoffLimit is not
 	//   incremented and a replacement pod is created.
 	// - Count: indicates that the pod is handled in the default way - the
@@ -260,7 +260,7 @@ type PodFailurePolicy struct {
 type SuccessPolicy struct {
 	// rules represents the list of alternative rules for the declaring the Jobs
 	// as successful before `.status.succeeded >= .spec.completions`. Once any of the rules are met,
-	// the "SucceededCriteriaMet" condition is added, and the lingering pods are removed.
+	// the "SuccessCriteriaMet" condition is added, and the lingering pods are removed.
 	// The terminal state for such a Job has the "Complete" condition.
 	// Additionally, these rules are evaluated in order; Once the Job meets one of the rules,
 	// other rules are ignored. At most 20 elements are allowed.
@@ -346,13 +346,12 @@ type JobSpec struct {
 	// When the field is specified, it must be immutable and works only for the Indexed Jobs.
 	// Once the Job meets the SuccessPolicy, the lingering pods are terminated.
 	//
-	// This field is beta-level. To use this field, you must enable the
-	// `JobSuccessPolicy` feature gate (enabled by default).
 	// +optional
 	SuccessPolicy *SuccessPolicy `json:"successPolicy,omitempty" protobuf:"bytes,16,opt,name=successPolicy"`
 
 	// Specifies the number of retries before marking this job failed.
-	// Defaults to 6
+	// Defaults to 6, unless backoffLimitPerIndex (only Indexed Job) is specified.
+	// When backoffLimitPerIndex is specified, backoffLimit defaults to 2147483647.
 	// +optional
 	BackoffLimit *int32 `json:"backoffLimit,omitempty" protobuf:"varint,7,opt,name=backoffLimit"`
 
@@ -362,8 +361,6 @@ type JobSpec struct {
 	// batch.kubernetes.io/job-index-failure-count annotation. It can only
 	// be set when Job's completionMode=Indexed, and the Pod's restart
 	// policy is Never. The field is immutable.
-	// This field is beta-level. It can be used when the `JobBackoffLimitPerIndex`
-	// feature gate is enabled (enabled by default).
 	// +optional
 	BackoffLimitPerIndex *int32 `json:"backoffLimitPerIndex,omitempty" protobuf:"varint,12,opt,name=backoffLimitPerIndex"`
 
@@ -375,9 +372,9 @@ type JobSpec struct {
 	// It can only be specified when backoffLimitPerIndex is set.
 	// It can be null or up to completions. It is required and must be
 	// less than or equal to 10^4 when is completions greater than 10^5.
-	// This field is beta-level. It can be used when the `JobBackoffLimitPerIndex`
-	// feature gate is enabled (enabled by default).
 	// +optional
+	// +k8s:optional
+	// +k8s:alpha(since: "1.37")=+k8s:dependentRequired("backoffLimitPerIndex")
 	MaxFailedIndexes *int32 `json:"maxFailedIndexes,omitempty" protobuf:"varint,13,opt,name=maxFailedIndexes"`
 
 	// TODO enabled it when https://github.com/kubernetes/kubernetes/issues/28486 has been fixed
@@ -464,8 +461,6 @@ type JobSpec struct {
 	//
 	// When using podFailurePolicy, Failed is the the only allowed value.
 	// TerminatingOrFailed and Failed are allowed values when podFailurePolicy is not in use.
-	// This is an beta field. To use this, enable the JobPodReplacementPolicy feature toggle.
-	// This is on by default.
 	// +optional
 	PodReplacementPolicy *PodReplacementPolicy `json:"podReplacementPolicy,omitempty" protobuf:"bytes,14,opt,name=podReplacementPolicy,casttype=podReplacementPolicy"`
 
@@ -478,11 +473,81 @@ type JobSpec struct {
 	// by RFC 1123. All characters trailing the first "/" must be valid HTTP Path
 	// characters as defined by RFC 3986. The value cannot exceed 63 characters.
 	// This field is immutable.
-	//
-	// This field is beta-level. The job controller accepts setting the field
-	// when the feature gate JobManagedBy is enabled (enabled by default).
 	// +optional
 	ManagedBy *string `json:"managedBy,omitempty" protobuf:"bytes,15,opt,name=managedBy"`
+
+	// scheduling defines the Workload-aware Scheduling configuration for this Job.
+	// When set, it specifies the scheduling policy (basic or gang), topology
+	// constraints, disruption mode, and shared resource claims.
+	// When omitted, the Job defaults to the basic scheduling policy, which behaves
+	// as standard pod-by-pod scheduling.
+	// This field is alpha-level and requires the WorkloadWithJob feature gate.
+	// This field is immutable, including whether it is set at all, only
+	// policy.gang.minCount may be changed after creation.
+	//
+	// +featureGate=WorkloadWithJob
+	// +optional
+	// +k8s:ifDisabled(WorkloadWithJob)=+k8s:forbidden
+	// +k8s:optional
+	// +k8s:update=NoSet
+	// +k8s:update=NoUnset
+	Scheduling *JobSchedulingConfiguration `json:"scheduling,omitempty" protobuf:"bytes,17,opt,name=scheduling"`
+}
+
+// JobSchedulingConfiguration composes the reusable workload-aware
+// scheduling building blocks.
+type JobSchedulingConfiguration struct {
+	// SchedulingPolicy defines the scheduling policy for this Job.
+	// Exactly one of Basic or Gang must be set.
+	// This field is immutable after creation: the policy may not be added or
+	// removed. The policy variant (basic/gang) is frozen by hand-written
+	// validation; only schedulingPolicy.gang.minCount may be changed.
+	//
+	// +optional
+	// +k8s:optional
+	// +k8s:update=NoSet
+	// +k8s:update=NoUnset
+	SchedulingPolicy *schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy `json:"schedulingPolicy,omitempty" protobuf:"bytes,1,opt,name=schedulingPolicy"`
+
+	// SchedulingConstraints defines scheduling constraints (e.g. topology)
+	// for the Job's pods.
+	// This field is immutable after creation.
+	//
+	// +optional
+	// +k8s:optional
+	// +k8s:immutable
+	SchedulingConstraints *schedulingv1alpha3.WorkloadPodGroupSchedulingConstraints `json:"schedulingConstraints,omitempty" protobuf:"bytes,2,opt,name=schedulingConstraints"`
+
+	// DisruptionMode defines the mode in which the Job's pods can be disrupted.
+	// One of Single, All.
+	// This field is immutable after creation: it may not be added or removed,
+	// and the selected mode may not be changed.
+	//
+	// +optional
+	// +k8s:optional
+	// +k8s:immutable
+	DisruptionMode *schedulingv1alpha3.WorkloadPodGroupDisruptionMode `json:"disruptionMode,omitempty" protobuf:"bytes,3,opt,name=disruptionMode"`
+
+	// ResourceClaims defines which ResourceClaims may be shared among Pods in
+	// the Job. Pods consume the devices allocated to a PodGroup's claim by
+	// defining a claim in its own Spec.ResourceClaims that matches the
+	// PodGroup's claim exactly. The claim must have the same name and refer to
+	// the same ResourceClaim or ResourceClaimTemplate.
+	// At most 4 claims may be set, matching the limit on the resulting PodGroup.
+	// This list is immutable after creation: entries may neither be added,
+	// removed, nor modified.
+	//
+	// +optional
+	// +patchMergeKey=name
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=name
+	// +k8s:optional
+	// +k8s:listType=map
+	// +k8s:listMapKey=name
+	// +k8s:maxItems=4
+	// +k8s:immutable
+	ResourceClaims []schedulingv1alpha3.WorkloadPodGroupResourceClaim `json:"resourceClaims,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,4,rep,name=resourceClaims"`
 }
 
 // JobStatus represents the current state of a Job.
@@ -545,9 +610,6 @@ type JobStatus struct {
 
 	// The number of pods which are terminating (in phase Pending or Running
 	// and have a deletionTimestamp).
-	//
-	// This field is beta-level. The job controller populates the field when
-	// the feature gate JobPodReplacementPolicy is enabled (enabled by default).
 	// +optional
 	Terminating *int32 `json:"terminating,omitempty" protobuf:"varint,11,opt,name=terminating"`
 
@@ -571,8 +633,6 @@ type JobStatus struct {
 	// represented as "1,3-5,7".
 	// The set of failed indexes cannot overlap with the set of completed indexes.
 	//
-	// This field is beta-level. It can be used when the `JobBackoffLimitPerIndex`
-	// feature gate is enabled (enabled by default).
 	// +optional
 	FailedIndexes *string `json:"failedIndexes,omitempty" protobuf:"bytes,10,opt,name=failedIndexes"`
 
@@ -640,20 +700,14 @@ const (
 	// JobReasponDeadlineExceeded means job duration is past ActiveDeadline
 	JobReasonDeadlineExceeded string = "DeadlineExceeded"
 	// JobReasonMaxFailedIndexesExceeded indicates that an indexed of a job failed
-	// This const is used in beta-level feature: https://kep.k8s.io/3850.
 	JobReasonMaxFailedIndexesExceeded string = "MaxFailedIndexesExceeded"
 	// JobReasonFailedIndexes means Job has failed indexes.
-	// This const is used in beta-level feature: https://kep.k8s.io/3850.
 	JobReasonFailedIndexes string = "FailedIndexes"
 	// JobReasonSuccessPolicy reason indicates a SuccessCriteriaMet condition is added due to
 	// a Job met successPolicy.
-	// https://kep.k8s.io/3998
-	// This is currently a beta field.
 	JobReasonSuccessPolicy string = "SuccessPolicy"
 	// JobReasonCompletionsReached reason indicates a SuccessCriteriaMet condition is added due to
 	// a number of succeeded Job pods met completions.
-	// - https://kep.k8s.io/3998
-	// This is currently a beta field.
 	JobReasonCompletionsReached string = "CompletionsReached"
 )
 
@@ -682,6 +736,7 @@ type JobTemplateSpec struct {
 	// Standard object's metadata of the jobs created from this template.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
+	// +k8s:opaqueType
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
 	// Specification of the desired behavior of the job.
@@ -695,8 +750,9 @@ type JobTemplateSpec struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.21
 
 // CronJob represents the configuration of a single cron job.
+// +k8s:supportsSubresource="/status"
 type CronJob struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta `json:""`
 	// Standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
@@ -704,7 +760,7 @@ type CronJob struct {
 
 	// Specification of the desired behavior of a cron job, including the schedule.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
-	// +optional
+	// +required
 	Spec CronJobSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
 	// Current status of a cron job.
@@ -718,7 +774,7 @@ type CronJob struct {
 
 // CronJobList is a collection of cron jobs.
 type CronJobList struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta `json:""`
 
 	// Standard list metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
@@ -733,6 +789,8 @@ type CronJobList struct {
 type CronJobSpec struct {
 
 	// The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
+	// +required
+	// +k8s:beta(since: "1.37")=+k8s:required
 	Schedule string `json:"schedule" protobuf:"bytes,1,opt,name=schedule"`
 
 	// The time zone name for the given schedule, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones.

@@ -20,9 +20,23 @@ package v1
 
 // ProjectedVolumeSourceApplyConfiguration represents a declarative configuration of the ProjectedVolumeSource type for use
 // with apply.
+//
+// Represents a projected volume source
 type ProjectedVolumeSourceApplyConfiguration struct {
-	Sources     []VolumeProjectionApplyConfiguration `json:"sources,omitempty"`
-	DefaultMode *int32                               `json:"defaultMode,omitempty"`
+	// sources is the list of volume projections. Each entry in this list
+	// handles one source.
+	Sources []VolumeProjectionApplyConfiguration `json:"sources,omitempty"`
+	// defaultMode are the mode bits used to set permissions on created files by default.
+	// Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511.
+	// YAML accepts both octal and decimal values, JSON requires decimal values for mode bits.
+	// Directories within the path are not affected by this setting.
+	// This might be in conflict with other options that affect the file
+	// mode, like fsGroup, and the result can be other mode bits set.
+	DefaultMode *int32 `json:"defaultMode,omitempty"`
+	// defaultUser is Optional: The owner UID of the created files by default.
+	// The defaultUser field is only used as a fallback when the item-level user field is unset.
+	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	DefaultUser *int64 `json:"defaultUser,omitempty"`
 }
 
 // ProjectedVolumeSourceApplyConfiguration constructs a declarative configuration of the ProjectedVolumeSource type for use with
@@ -49,5 +63,13 @@ func (b *ProjectedVolumeSourceApplyConfiguration) WithSources(values ...*VolumeP
 // If called multiple times, the DefaultMode field is set to the value of the last call.
 func (b *ProjectedVolumeSourceApplyConfiguration) WithDefaultMode(value int32) *ProjectedVolumeSourceApplyConfiguration {
 	b.DefaultMode = &value
+	return b
+}
+
+// WithDefaultUser sets the DefaultUser field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the DefaultUser field is set to the value of the last call.
+func (b *ProjectedVolumeSourceApplyConfiguration) WithDefaultUser(value int64) *ProjectedVolumeSourceApplyConfiguration {
+	b.DefaultUser = &value
 	return b
 }

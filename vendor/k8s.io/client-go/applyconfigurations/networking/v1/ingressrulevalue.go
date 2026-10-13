@@ -20,7 +20,13 @@ package v1
 
 // IngressRuleValueApplyConfiguration represents a declarative configuration of the IngressRuleValue type for use
 // with apply.
+//
+// IngressRuleValue represents a rule to apply against incoming requests. If the
+// rule is satisfied, the request is routed to the specified backend. Currently
+// mixing different types of rules in a single Ingress is disallowed, so exactly
+// one of the following must be set.
 type IngressRuleValueApplyConfiguration struct {
+	// http is a HTTP IngressRuleValue, which contains a list of http selectors
 	HTTP *HTTPIngressRuleValueApplyConfiguration `json:"http,omitempty"`
 }
 
