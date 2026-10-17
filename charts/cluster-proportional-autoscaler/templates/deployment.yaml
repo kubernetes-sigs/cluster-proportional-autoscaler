@@ -63,14 +63,18 @@ spec:
             {{- with .Values.options.vmodule }}
             - --vmodule={{ . }}
           {{- end }}
+          ports:
+            - containerPort: 8080
+              name: status
+              protocol: TCP
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 8080
+              port: status
           readinessProbe:
             httpGet:
               path: /healthz
-              port: 8080
+              port: status
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
