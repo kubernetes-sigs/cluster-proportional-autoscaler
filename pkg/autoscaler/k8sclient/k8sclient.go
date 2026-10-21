@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -242,24 +243,28 @@ func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error)
 
 func (k *k8sClient) UpdateReplicas(expReplicas int32) (err error) {
 	for _, target := range k.scaleTargets.targets {
-		prevReplicas, err := k.UpdateTargetReplicas(expReplicas, target)
+		prevReplicas, uid, err := k.UpdateTargetReplicas(expReplicas, target)
 		if err != nil {
 			return err
 		}
 		if expReplicas != prevReplicas {
-			ref := targetObjectReference(target, k.scaleTargets.namespace)
-			k.recorder.Eventf(ref, v1.EventTypeNormal, "AutoScaling",
-				"Cluster proportional autoscaler updated replicas from %d to %d (SchedulableNodes: %d, SchedulableCores: %d)",
-				prevReplicas, expReplicas,
-				k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
+			k.recordReplicaUpdateEvent(target, uid, prevReplicas, expReplicas)
 		}
 	}
 	return nil
 }
 
+func (k *k8sClient) recordReplicaUpdateEvent(target target, uid types.UID, prevReplicas, expReplicas int32) {
+	ref := targetObjectReference(target, k.scaleTargets.namespace, uid)
+	k.recorder.Eventf(ref, v1.EventTypeNormal, "AutoScaling",
+		"Cluster proportional autoscaler updated replicas from %d to %d (SchedulableNodes: %d, SchedulableCores: %d)",
+		prevReplicas, expReplicas,
+		k.clusterStatus.SchedulableNodes, k.clusterStatus.SchedulableCores)
+}
+
 // targetObjectReference builds an ObjectReference for the given scale target
 // so that events can be recorded against it.
-func targetObjectReference(t target, namespace string) *v1.ObjectReference {
+func targetObjectReference(t target, namespace string, uid types.UID) *v1.ObjectReference {
 	var apiVersion, kind string
 	switch strings.ToLower(t.kind) {
 	case "deployment", "deployments":
@@ -283,22 +288,24 @@ func targetObjectReference(t target, namespace string) *v1.ObjectReference {
 		Kind:       kind,
 		Name:       t.name,
 		Namespace:  namespace,
+		UID:        uid,
 	}
 }
 
-func (k *k8sClient) UpdateTargetReplicas(expReplicas int32, target target) (prevReplicas int32, err error) {
-	prevReplicas, err = k.updateReplicasAppsV1(expReplicas, target)
+func (k *k8sClient) UpdateTargetReplicas(expReplicas int32, target target) (prevReplicas int32, uid types.UID, err error) {
+	prevReplicas, uid, err = k.updateReplicasAppsV1(expReplicas, target)
 	if err == nil || !apierrors.IsForbidden(err) {
-		return prevReplicas, err
+		return prevReplicas, uid, err
 	}
 	glog.V(1).Infof("Falling back to extensions/v1beta1, error using apps/v1: %v", err)
 
 	// Fall back to using the extensions API if we get a forbidden error
 	scale, err := k.getScaleExtensionsV1beta1(&target)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	prevReplicas = scale.Spec.Replicas
+	uid = scale.UID
 	if expReplicas != prevReplicas {
 		glog.V(0).Infof(
 			"Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]",
@@ -314,10 +321,10 @@ func (k *k8sClient) UpdateTargetReplicas(expReplicas int32, target target) (prev
 		scale.Spec.Replicas = expReplicas
 		_, err = k.updateScaleExtensionsV1beta1(&target, scale)
 		if err != nil {
-			return 0, err
+			return 0, "", err
 		}
 	}
-	return prevReplicas, nil
+	return prevReplicas, uid, nil
 }
 
 func (k *k8sClient) getScaleExtensionsV1beta1(target *target) (*extensionsv1beta1.Scale, error) {
@@ -343,18 +350,19 @@ func (k *k8sClient) updateScaleExtensionsV1beta1(target *target, scale *extensio
 	}
 }
 
-func (k *k8sClient) updateReplicasAppsV1(expReplicas int32, target target) (prevReplicas int32, err error) {
+func (k *k8sClient) updateReplicasAppsV1(expReplicas int32, target target) (prevReplicas int32, uid types.UID, err error) {
 	req, err := requestForTarget(k.clientset.AppsV1().RESTClient().Get(), &target, k.scaleTargets.namespace)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 
 	scale := &autoscalingv1.Scale{}
 	if err = req.Do(context.TODO()).Into(scale); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 
 	prevReplicas = scale.Spec.Replicas
+	uid = scale.UID
 	if expReplicas != prevReplicas {
 		glog.V(0).Infof(
 			"Cluster status: SchedulableNodes[%v], TotalNodes[%v], SchedulableCores[%v], TotalCores[%v]",
@@ -370,14 +378,14 @@ func (k *k8sClient) updateReplicasAppsV1(expReplicas int32, target target) (prev
 		scale.Spec.Replicas = expReplicas
 		req, err = requestForTarget(k.clientset.AppsV1().RESTClient().Put(), &target, k.scaleTargets.namespace)
 		if err != nil {
-			return 0, err
+			return 0, "", err
 		}
 		if err = req.Body(scale).Do(context.TODO()).Error(); err != nil {
-			return 0, err
+			return 0, "", err
 		}
 	}
 
-	return prevReplicas, nil
+	return prevReplicas, uid, nil
 }
 
 func requestForTarget(req *rest.Request, target *target, namespace string) (*rest.Request, error) {
