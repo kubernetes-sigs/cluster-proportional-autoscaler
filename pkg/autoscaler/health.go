@@ -58,12 +58,23 @@ type HealthServer interface {
 
 type httpHealthServer struct {
 	lastPollCycleHealth *healthInfo
+	port                int
+}
+
+func (hs *httpHealthServer) handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, req *http.Request) {})
+	mux.HandleFunc("/last-poll", hs.lastPollFn)
+	return mux
 }
 
 func (hs *httpHealthServer) Start() {
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, req *http.Request) {})
-	http.HandleFunc("/last-poll", hs.lastPollFn)
-	glog.Fatal(http.ListenAndServe(":8080", nil))
+	if hs.port <= 0 {
+		return
+	}
+	addr := fmt.Sprintf(":%d", hs.port)
+	glog.V(0).Infof("Starting healthz HTTP server on %s", addr)
+	glog.Fatal(http.ListenAndServe(addr, hs.handler()))
 }
 
 func (hs *httpHealthServer) lastPollFn(w http.ResponseWriter, req *http.Request) {
