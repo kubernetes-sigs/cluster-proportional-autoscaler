@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/spf13/pflag"
@@ -30,26 +31,35 @@ import (
 
 // AutoScalerConfig configures and runs an autoscaler server
 type AutoScalerConfig struct {
-	Target             string
-	ConfigMap          string
-	Namespace          string
-	DefaultParams      configMapData
-	PollPeriodSeconds  int
-	PrintVer           bool
-	NodeLabels         string
-	MaxSyncFailures    int
-	KubeConfig         string
-	HealthzBindAddress string
-	HealthzPort        int
+	Target                       string
+	ConfigMap                    string
+	Namespace                    string
+	DefaultParams                configMapData
+	PollPeriodSeconds            int
+	PrintVer                     bool
+	NodeLabels                   string
+	MaxSyncFailures              int
+	KubeConfig                   string
+	HealthzBindAddress           string
+	HealthzPort                  int
+	LeaderElect                  bool
+	LeaderElectResourceName      string
+	LeaderElectResourceNamespace string
+	LeaderElectLeaseDuration     time.Duration
+	LeaderElectRenewDeadline     time.Duration
+	LeaderElectRetryPeriod       time.Duration
 }
 
 // NewAutoScalerConfig returns a Autoscaler config
 func NewAutoScalerConfig() *AutoScalerConfig {
 	return &AutoScalerConfig{
-		Namespace:         os.Getenv("MY_POD_NAMESPACE"),
-		PollPeriodSeconds: 10,
-		PrintVer:          false,
-		HealthzPort:       8080,
+		Namespace:                os.Getenv("MY_POD_NAMESPACE"),
+		PollPeriodSeconds:        10,
+		PrintVer:                 false,
+		HealthzPort:              8080,
+		LeaderElectLeaseDuration: 15 * time.Second,
+		LeaderElectRenewDeadline: 10 * time.Second,
+		LeaderElectRetryPeriod:   2 * time.Second,
 	}
 }
 
@@ -79,6 +89,32 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 	if c.HealthzBindAddress != "" && net.ParseIP(c.HealthzBindAddress) == nil {
 		errorsFound = true
 		glog.Errorf("--healthz-bind-address must be a valid IP address (got %q)", c.HealthzBindAddress)
+	}
+	if c.LeaderElect {
+		c.LeaderElectResourceName = strings.TrimSpace(c.LeaderElectResourceName)
+		if c.LeaderElectResourceName == "" {
+			c.LeaderElectResourceName = strings.TrimSpace(c.ConfigMap)
+		}
+		c.LeaderElectResourceNamespace = strings.TrimSpace(c.LeaderElectResourceNamespace)
+		if c.LeaderElectResourceNamespace == "" {
+			c.LeaderElectResourceNamespace = strings.TrimSpace(c.Namespace)
+		}
+		if c.LeaderElectLeaseDuration < time.Second {
+			errorsFound = true
+			glog.Errorf("--leader-elect-lease-duration (%v) must be at least 1s", c.LeaderElectLeaseDuration)
+		}
+		if c.LeaderElectRenewDeadline <= 0 || c.LeaderElectRetryPeriod <= 0 {
+			errorsFound = true
+			glog.Errorf("--leader-elect-renew-deadline and --leader-elect-retry-period must be positive")
+		} else if c.LeaderElectLeaseDuration <= c.LeaderElectRenewDeadline {
+			errorsFound = true
+			glog.Errorf("--leader-elect-lease-duration (%v) must be greater than --leader-elect-renew-deadline (%v)",
+				c.LeaderElectLeaseDuration, c.LeaderElectRenewDeadline)
+		} else if c.LeaderElectRenewDeadline <= c.LeaderElectRetryPeriod {
+			errorsFound = true
+			glog.Errorf("--leader-elect-renew-deadline (%v) must be greater than --leader-elect-retry-period (%v)",
+				c.LeaderElectRenewDeadline, c.LeaderElectRetryPeriod)
+		}
 	}
 
 	// Log all sanity check errors before returning a single error string
@@ -147,4 +183,10 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.KubeConfig, "kubeconfig", c.KubeConfig, "Path to the kubeconfig file.")
 	fs.StringVar(&c.HealthzBindAddress, "healthz-bind-address", c.HealthzBindAddress, "IP address for the /healthz and /last-poll HTTP endpoints (empty binds all interfaces).")
 	fs.IntVar(&c.HealthzPort, "healthz-port", c.HealthzPort, "Port for the /healthz and /last-poll HTTP endpoints (set to 0 to disable).")
+	fs.BoolVar(&c.LeaderElect, "leader-elect", c.LeaderElect, "Enable Lease-based leader election (coordination.k8s.io/v1) so standby replicas remain idle without starting informers or polling.")
+	fs.StringVar(&c.LeaderElectResourceName, "leader-elect-resource-name", c.LeaderElectResourceName, "Name of the Lease object used for leader election (defaults to --configmap).")
+	fs.StringVar(&c.LeaderElectResourceNamespace, "leader-elect-resource-namespace", c.LeaderElectResourceNamespace, "Namespace of the Lease object used for leader election (defaults to --namespace).")
+	fs.DurationVar(&c.LeaderElectLeaseDuration, "leader-elect-lease-duration", c.LeaderElectLeaseDuration, "Duration that non-leader candidates will wait before forcing acquisition of the leader lease.")
+	fs.DurationVar(&c.LeaderElectRenewDeadline, "leader-elect-renew-deadline", c.LeaderElectRenewDeadline, "Duration that the acting leader will retry refreshing leadership before giving up.")
+	fs.DurationVar(&c.LeaderElectRetryPeriod, "leader-elect-retry-period", c.LeaderElectRetryPeriod, "Duration the LeaderElector clients should wait between tries of actions.")
 }

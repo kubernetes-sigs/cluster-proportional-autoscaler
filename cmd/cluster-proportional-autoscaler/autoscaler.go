@@ -17,8 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"k8s.io/component-base/cli/flag"
 
@@ -52,6 +55,20 @@ func main() {
 		glog.Errorf("%v", err)
 		os.Exit(1)
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			stop()
+			glog.V(0).Infof("Received shutdown signal; stopping autoscaler")
+			scaler.Stop()
+		case <-done:
+		}
+	}()
+
 	// Begin autoscaling.
 	scaler.Run()
 }
