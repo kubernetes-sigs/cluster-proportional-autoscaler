@@ -38,6 +38,7 @@ import (
 type AutoScaler struct {
 	k8sClient           k8sclient.K8sClient
 	controller          controller.Controller
+	inUpdateModeOff     bool
 	configMapName       string
 	defaultParams       map[string]string
 	pollPeriod          time.Duration
@@ -151,10 +152,28 @@ func (s *AutoScaler) pollAPIServer() error {
 		return err
 	}
 
+	paused, controllerConfigMap, err := resolveConfigMap(configMap, s.defaultParams)
+	if err != nil {
+		glog.Errorf("Error parsing ConfigMap parameters: %v", err)
+		return err
+	}
+	if paused {
+		if !s.inUpdateModeOff {
+			glog.V(0).Infof("ConfigMap %s/%s has updateMode=Off (version=%s); skipping replica reconciliation",
+				configMap.Namespace, configMap.Name, configMap.ResourceVersion)
+			s.inUpdateModeOff = true
+		} else {
+			glog.V(4).Infof("ConfigMap %s/%s has updateMode=Off (version=%s); skipping replica reconciliation",
+				configMap.Namespace, configMap.Name, configMap.ResourceVersion)
+		}
+		return nil
+	}
+	s.inUpdateModeOff = false
+
 	// Only sync updated ConfigMap or before controller is set.
-	if s.controller == nil || configMap.ObjectMeta.ResourceVersion != s.controller.GetParamsVersion() {
+	if s.controller == nil || controllerConfigMap.ObjectMeta.ResourceVersion != s.controller.GetParamsVersion() {
 		// Ensure corresponding controller type and scaling params.
-		s.controller, err = plugin.EnsureController(s.controller, configMap)
+		s.controller, err = plugin.EnsureController(s.controller, controllerConfigMap)
 		if err != nil || s.controller == nil {
 			glog.Errorf("Error ensuring controller: %v", err)
 			return err

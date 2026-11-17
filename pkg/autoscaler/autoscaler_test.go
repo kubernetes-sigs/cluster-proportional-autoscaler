@@ -25,6 +25,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	testingclock "k8s.io/utils/clock/testing"
 
@@ -328,4 +329,70 @@ func waitForReplicasNumberSatisfy(t *testing.T, mockK8s *k8sclient.MockK8sClient
 type mockHealthServer struct{}
 
 func (s mockHealthServer) Start() {
+}
+
+func TestPollAPIServer_ConfigMapUpdateModeAndUseDefaults(t *testing.T) {
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "my-autoscaler", ResourceVersion: "1"},
+		Data: map[string]string{
+			linearcontroller.ControllerType: `{"coresPerReplica": 0, "nodesPerReplica": 10, "min": 1}`,
+		},
+	}
+	mockK8s := &k8sclient.MockK8sClient{
+		NumOfNodes: 100,
+		NumOfCores: 400,
+		ConfigMap:  cm,
+	}
+	s := &AutoScaler{
+		k8sClient:           mockK8s,
+		defaultParams:       map[string]string{linearcontroller.ControllerType: `{"coresPerReplica": 0, "nodesPerReplica": 25, "min": 1}`},
+		clock:               testingclock.NewFakeClock(time.Now()),
+		pollPeriod:          10 * time.Second,
+		configMapName:       "my-autoscaler",
+		stopCh:              make(chan struct{}),
+		readyCh:             make(chan struct{}, 1),
+		lastPollCycleHealth: newHealthInfo(),
+		healthServer:        mockHealthServer{},
+	}
+
+	// Auto mode reconciles to 100 / 10 = 10 replicas.
+	if err := s.pollAPIServer(); err != nil {
+		t.Fatalf("Auto poll failed: %v", err)
+	}
+	if mockK8s.NumOfReplicas != 10 {
+		t.Fatalf("Auto replicas = %d, want 10", mockK8s.NumOfReplicas)
+	}
+
+	// Off mode preserves manual replica edits across cluster size changes.
+	cm.ResourceVersion = "2"
+	cm.Data["updateMode"] = "Off"
+	mockK8s.NumOfReplicas = 42
+	mockK8s.NumOfNodes = 300
+	if err := s.pollAPIServer(); err != nil {
+		t.Fatalf("Off poll failed: %v", err)
+	}
+	if mockK8s.NumOfReplicas != 42 || !s.inUpdateModeOff {
+		t.Fatalf("Off mode: replicas=%d inUpdateModeOff=%v, want 42, true", mockK8s.NumOfReplicas, s.inUpdateModeOff)
+	}
+
+	// Returning to Auto with useDefaults=true evaluates --default-params (300 / 25 = 12).
+	cm.ResourceVersion = "3"
+	cm.Data["updateMode"] = "Auto"
+	cm.Data["useDefaults"] = "true"
+	if err := s.pollAPIServer(); err != nil {
+		t.Fatalf("Auto+useDefaults poll failed: %v", err)
+	}
+	if mockK8s.NumOfReplicas != 12 || s.inUpdateModeOff {
+		t.Fatalf("Auto+useDefaults: replicas=%d inUpdateModeOff=%v, want 12, false", mockK8s.NumOfReplicas, s.inUpdateModeOff)
+	}
+
+	// Invalid updateMode returns an error without modifying replicas.
+	cm.ResourceVersion = "4"
+	cm.Data["updateMode"] = "Invalid"
+	if err := s.pollAPIServer(); err == nil {
+		t.Fatal("expected error for invalid updateMode")
+	}
+	if mockK8s.NumOfReplicas != 12 {
+		t.Fatalf("replicas changed on invalid updateMode: got %d, want 12", mockK8s.NumOfReplicas)
+	}
 }

@@ -83,7 +83,11 @@ but it currently supports `linear` and `ladder` modes.
 The ConfigMap provides the configuration parameters, allowing on-the-fly changes(including control mode) without
 rebuilding or restarting the scaler containers/pods.
 
-Currently the two supported ConfigMap key value is: `ladder` and `linear`, which corresponding to two supported control mode.
+Currently the two supported ConfigMap control mode keys are `ladder` and `linear`.
+
+Optional metadata keys can also be set on the ConfigMap:
+- `updateMode`: Set to `"Off"` to pause scaling reconciliation without deleting the ConfigMap, or `"Auto"` (default) to reconcile replicas normally.
+- `useDefaults`: Set to `"true"` to evaluate `--default-params` (required in `"Auto"` mode) instead of using `linear`/`ladder` data in the ConfigMap (useful when upgrading default parameters without overwriting user-customized configs when `"false"` or omitted).
 
 ### Linear Mode
 
