@@ -71,6 +71,29 @@ func TestIsTargetFormatValid(t *testing.T) {
 	}
 }
 
+func TestScaleOptimizedModeFlag(t *testing.T) {
+	cfg := NewAutoScalerConfig()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	cfg.AddFlags(fs)
+	if cfg.ScaleOptimizedMode {
+		t.Fatal("expected ScaleOptimizedMode to default to false")
+	}
+	if err := fs.Parse([]string{
+		"--target=deployment/my-deployment",
+		"--configmap=my-autoscaler",
+		"--namespace=default",
+		"--scale-optimized-mode=true",
+	}); err != nil {
+		t.Fatalf("failed to parse flags: %v", err)
+	}
+	if !cfg.ScaleOptimizedMode {
+		t.Fatal("expected ScaleOptimizedMode=true after parsing --scale-optimized-mode=true")
+	}
+	if err := cfg.ValidateFlags(); err != nil {
+		t.Fatalf("ValidateFlags() unexpected error: %v", err)
+	}
+}
+
 func TestHealthzFlags(t *testing.T) {
 	defaults := NewAutoScalerConfig()
 	if defaults.HealthzPort != 8080 || defaults.HealthzBindAddress != "" {
