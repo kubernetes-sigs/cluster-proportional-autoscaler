@@ -67,7 +67,11 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 		return nil, err
 	}
 	healthInfo := newHealthInfo()
-	healthServer := httpHealthServer{lastPollCycleHealth: healthInfo, port: c.HealthzPort}
+	healthServer := httpHealthServer{
+		lastPollCycleHealth: healthInfo,
+		bindAddress:         c.HealthzBindAddress,
+		port:                c.HealthzPort,
+	}
 	return &AutoScaler{
 		k8sClient:           newK8sClient,
 		configMapName:       c.ConfigMap,

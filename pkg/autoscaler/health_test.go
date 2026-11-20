@@ -67,3 +67,22 @@ func TestHTTPHealthServerDisabledPort(t *testing.T) {
 	// port <= 0 should return immediately without binding or exiting.
 	(&httpHealthServer{port: 0}).Start()
 }
+
+func TestHTTPHealthServerListenAddr(t *testing.T) {
+	tests := []struct {
+		bind string
+		port int
+		want string
+	}{
+		{bind: "", port: 8080, want: ":8080"},
+		{bind: "127.0.0.1", port: 9154, want: "127.0.0.1:9154"},
+		{bind: "::1", port: 9154, want: "[::1]:9154"},
+		{bind: "0.0.0.0", port: 8080, want: "0.0.0.0:8080"},
+	}
+	for _, tc := range tests {
+		got := (&httpHealthServer{bindAddress: tc.bind, port: tc.port}).listenAddr()
+		if got != tc.want {
+			t.Errorf("listenAddr(%q, %d) = %q, want %q", tc.bind, tc.port, got, tc.want)
+		}
+	}
+}

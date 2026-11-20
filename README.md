@@ -28,6 +28,7 @@ Usage of cluster-proportional-autoscaler:
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
       --nodelabels=: NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.
       --max-sync-failures=[0]: Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.
+      --healthz-bind-address=: IP address for the /healthz and /last-poll HTTP endpoints (empty binds all interfaces).
       --healthz-port=8080: Port for the /healthz and /last-poll HTTP endpoints (set to 0 to disable).
 ```
 
