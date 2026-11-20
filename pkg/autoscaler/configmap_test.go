@@ -32,6 +32,7 @@ func TestResolveConfigMap(t *testing.T) {
 		cm            *v1.ConfigMap
 		defaultParams map[string]string
 		wantPaused    bool
+		wantWarning   bool
 		wantKey       string
 		wantPayload   string
 		wantErr       bool
@@ -50,9 +51,24 @@ func TestResolveConfigMap(t *testing.T) {
 			wantPayload: `{"nodesToReplicas":[[1,1]]}`,
 		},
 		{
-			name:          "useDefaults=true overrides stale key and can switch control mode",
+			name:          "useDefaults=true without control key uses defaultParams without warning",
+			cm:            &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "cpa", ResourceVersion: "3"}, Data: map[string]string{"useDefaults": "true"}},
+			defaultParams: defaultLadder,
+			wantKey:       "ladder",
+			wantPayload:   defaultLadder["ladder"],
+		},
+		{
+			name:          "useDefaults=true with matching linear payload uses defaultParams without warning",
+			cm:            &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "cpa", ResourceVersion: "3"}, Data: map[string]string{"useDefaults": "true", "linear": `{"nodesPerReplica":32}`}},
+			defaultParams: defaultLinear,
+			wantKey:       "linear",
+			wantPayload:   defaultLinear["linear"],
+		},
+		{
+			name:          "useDefaults=true overriding differing linear warns and uses defaultParams",
 			cm:            &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "cpa", ResourceVersion: "3"}, Data: map[string]string{"useDefaults": "true", "linear": `{"nodesPerReplica":999}`}},
 			defaultParams: defaultLadder,
+			wantWarning:   true,
 			wantKey:       "ladder",
 			wantPayload:   defaultLadder["ladder"],
 		},
@@ -62,8 +78,8 @@ func TestResolveConfigMap(t *testing.T) {
 			wantPaused: true,
 		},
 		{
-			name:       "Off mode with useDefaults=true and whitespace skips defaultParams",
-			cm:         &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "cpa", ResourceVersion: "5"}, Data: map[string]string{"updateMode": " off ", "useDefaults": " TRUE ", "linear": `{"nodesPerReplica":16}`}},
+			name:       "Off mode returns early ignoring extra keys and invalid useDefaults",
+			cm:         &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "cpa", ResourceVersion: "5"}, Data: map[string]string{"updateMode": " off ", "useDefaults": "invalid", "linear": `{}`, "ladder": `{}`, "extra": "1"}},
 			wantPaused: true,
 		},
 		{
@@ -97,8 +113,8 @@ func TestResolveConfigMap(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:          "useDefaults=true with empty or invalid defaultParams fails",
-			cm:            &v1.ConfigMap{Data: map[string]string{"useDefaults": "true", "linear": `{}`}},
+			name:          "useDefaults=true with empty defaultParams fails",
+			cm:            &v1.ConfigMap{Data: map[string]string{"useDefaults": "true"}},
 			defaultParams: nil,
 			wantErr:       true,
 		},
@@ -116,27 +132,30 @@ func TestResolveConfigMap(t *testing.T) {
 			if tc.cm != nil {
 				origLen = len(tc.cm.Data)
 			}
-			paused, gotCM, err := resolveConfigMap(tc.cm, tc.defaultParams)
+			got, err := resolveConfigMap(tc.cm, tc.defaultParams)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("resolveConfigMap() err = %v, wantErr %v", err, tc.wantErr)
 			}
 			if tc.wantErr {
 				return
 			}
-			if paused != tc.wantPaused {
-				t.Fatalf("paused = %v, want %v", paused, tc.wantPaused)
+			if got.paused != tc.wantPaused {
+				t.Fatalf("paused = %v, want %v", got.paused, tc.wantPaused)
+			}
+			if (got.warning != "") != tc.wantWarning {
+				t.Errorf("warning = %q, wantWarning %v", got.warning, tc.wantWarning)
 			}
 			if tc.wantPaused {
-				if gotCM != nil {
-					t.Fatalf("expected nil controllerCM when paused, got %+v", gotCM)
+				if got.controllerCM != nil {
+					t.Fatalf("expected nil controllerCM when paused, got %+v", got.controllerCM)
 				}
 				return
 			}
-			if len(gotCM.Data) != 1 || gotCM.Data[tc.wantKey] != tc.wantPayload {
-				t.Fatalf("controllerCM.Data = %v, want map[%s:%s]", gotCM.Data, tc.wantKey, tc.wantPayload)
+			if len(got.controllerCM.Data) != 1 || got.controllerCM.Data[tc.wantKey] != tc.wantPayload {
+				t.Fatalf("controllerCM.Data = %v, want map[%s:%s]", got.controllerCM.Data, tc.wantKey, tc.wantPayload)
 			}
-			if gotCM.ResourceVersion != tc.cm.ResourceVersion {
-				t.Errorf("ResourceVersion = %q, want %q", gotCM.ResourceVersion, tc.cm.ResourceVersion)
+			if got.controllerCM.ResourceVersion != tc.cm.ResourceVersion {
+				t.Errorf("ResourceVersion = %q, want %q", got.controllerCM.ResourceVersion, tc.cm.ResourceVersion)
 			}
 			if len(tc.cm.Data) != origLen {
 				t.Errorf("base ConfigMap Data was mutated: len %d -> %d", origLen, len(tc.cm.Data))

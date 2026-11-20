@@ -36,19 +36,20 @@ import (
 
 // AutoScaler determines the number of replicas to run
 type AutoScaler struct {
-	k8sClient           k8sclient.K8sClient
-	controller          controller.Controller
-	inUpdateModeOff     bool
-	configMapName       string
-	defaultParams       map[string]string
-	pollPeriod          time.Duration
-	clock               clock.WithTicker
-	stopCh              chan struct{}
-	readyCh             chan<- struct{} // For testing.
-	healthServer        HealthServer
-	lastPollCycleHealth *healthInfo
-	maxSyncFailures     int
-	exitFn              func()
+	k8sClient              k8sclient.K8sClient
+	controller             controller.Controller
+	inUpdateModeOff        bool
+	lastUseDefaultsWarnVer string
+	configMapName          string
+	defaultParams          map[string]string
+	pollPeriod             time.Duration
+	clock                  clock.WithTicker
+	stopCh                 chan struct{}
+	readyCh                chan<- struct{} // For testing.
+	healthServer           HealthServer
+	lastPollCycleHealth    *healthInfo
+	maxSyncFailures        int
+	exitFn                 func()
 }
 
 // NewAutoScaler returns a new AutoScaler
@@ -152,12 +153,12 @@ func (s *AutoScaler) pollAPIServer() error {
 		return err
 	}
 
-	paused, controllerConfigMap, err := resolveConfigMap(configMap, s.defaultParams)
+	resolved, err := resolveConfigMap(configMap, s.defaultParams)
 	if err != nil {
 		glog.Errorf("Error parsing ConfigMap parameters: %v", err)
 		return err
 	}
-	if paused {
+	if resolved.paused {
 		if !s.inUpdateModeOff {
 			glog.V(0).Infof("ConfigMap %s/%s has updateMode=Off (version=%s); skipping replica reconciliation",
 				configMap.Namespace, configMap.Name, configMap.ResourceVersion)
@@ -166,9 +167,19 @@ func (s *AutoScaler) pollAPIServer() error {
 			glog.V(4).Infof("ConfigMap %s/%s has updateMode=Off (version=%s); skipping replica reconciliation",
 				configMap.Namespace, configMap.Name, configMap.ResourceVersion)
 		}
+		s.lastUseDefaultsWarnVer = ""
 		return nil
 	}
 	s.inUpdateModeOff = false
+	if resolved.warning != "" {
+		if configMap.ResourceVersion == "" || configMap.ResourceVersion != s.lastUseDefaultsWarnVer {
+			glog.Warning(resolved.warning)
+			s.lastUseDefaultsWarnVer = configMap.ResourceVersion
+		}
+	} else {
+		s.lastUseDefaultsWarnVer = ""
+	}
+	controllerConfigMap := resolved.controllerCM
 
 	// Only sync updated ConfigMap or before controller is set.
 	if s.controller == nil || controllerConfigMap.ObjectMeta.ResourceVersion != s.controller.GetParamsVersion() {

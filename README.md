@@ -86,8 +86,8 @@ rebuilding or restarting the scaler containers/pods.
 Currently the two supported ConfigMap control mode keys are `ladder` and `linear`.
 
 Optional metadata keys can also be set on the ConfigMap:
-- `updateMode`: Set to `"Off"` to pause scaling reconciliation without deleting the ConfigMap, or `"Auto"` (default) to reconcile replicas normally.
-- `useDefaults`: Set to `"true"` to evaluate `--default-params` (required in `"Auto"` mode) instead of using `linear`/`ladder` data in the ConfigMap (useful when upgrading default parameters without overwriting user-customized configs when `"false"` or omitted).
+- `updateMode`: Set to `"Off"` to pause scaling reconciliation without deleting the ConfigMap (other keys in the ConfigMap are ignored while paused), or `"Auto"` (default) to reconcile replicas normally.
+- `useDefaults`: Set to `"false"` (default when omitted) to use `linear`/`ladder` from the ConfigMap, or `"true"` to evaluate `--default-params` instead. Precedence: when `useDefaults` is `"true"`, `--default-params` takes precedence over any `linear` or `ladder` key in the ConfigMap (a warning is logged once per ConfigMap version if the ConfigMap's `linear`/`ladder` differs from `--default-params`). Set `useDefaults` to `"false"` or remove it to apply custom `linear`/`ladder` parameters.
 
 ### Linear Mode
 
