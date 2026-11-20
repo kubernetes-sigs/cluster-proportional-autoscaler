@@ -20,6 +20,7 @@ package options
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -29,15 +30,17 @@ import (
 
 // AutoScalerConfig configures and runs an autoscaler server
 type AutoScalerConfig struct {
-	Target            string
-	ConfigMap         string
-	Namespace         string
-	DefaultParams     configMapData
-	PollPeriodSeconds int
-	PrintVer          bool
-	NodeLabels        string
-	MaxSyncFailures   int
-	KubeConfig        string
+	Target             string
+	ConfigMap          string
+	Namespace          string
+	DefaultParams      configMapData
+	PollPeriodSeconds  int
+	PrintVer           bool
+	NodeLabels         string
+	MaxSyncFailures    int
+	KubeConfig         string
+	HealthzBindAddress string
+	HealthzPort        int
 }
 
 // NewAutoScalerConfig returns a Autoscaler config
@@ -46,6 +49,7 @@ func NewAutoScalerConfig() *AutoScalerConfig {
 		Namespace:         os.Getenv("MY_POD_NAMESPACE"),
 		PollPeriodSeconds: 10,
 		PrintVer:          false,
+		HealthzPort:       8080,
 	}
 }
 
@@ -67,6 +71,14 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 	if c.PollPeriodSeconds < 1 {
 		errorsFound = true
 		glog.Errorf("--poll-period-seconds cannot be less than 1")
+	}
+	if c.HealthzPort < 0 || c.HealthzPort > 65535 {
+		errorsFound = true
+		glog.Errorf("--healthz-port must be between 0 and 65535 (got %d)", c.HealthzPort)
+	}
+	if c.HealthzBindAddress != "" && net.ParseIP(c.HealthzBindAddress) == nil {
+		errorsFound = true
+		glog.Errorf("--healthz-bind-address must be a valid IP address (got %q)", c.HealthzBindAddress)
 	}
 
 	// Log all sanity check errors before returning a single error string
@@ -133,4 +145,6 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.NodeLabels, "nodelabels", c.NodeLabels, "NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.")
 	fs.IntVar(&c.MaxSyncFailures, "max-sync-failures", c.MaxSyncFailures, "Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.")
 	fs.StringVar(&c.KubeConfig, "kubeconfig", c.KubeConfig, "Path to the kubeconfig file.")
+	fs.StringVar(&c.HealthzBindAddress, "healthz-bind-address", c.HealthzBindAddress, "IP address for the /healthz and /last-poll HTTP endpoints (empty binds all interfaces).")
+	fs.IntVar(&c.HealthzPort, "healthz-port", c.HealthzPort, "Port for the /healthz and /last-poll HTTP endpoints (set to 0 to disable).")
 }

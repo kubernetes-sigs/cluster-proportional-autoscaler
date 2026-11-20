@@ -18,7 +18,9 @@ package autoscaler
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/golang/glog"
@@ -58,12 +60,28 @@ type HealthServer interface {
 
 type httpHealthServer struct {
 	lastPollCycleHealth *healthInfo
+	bindAddress         string
+	port                int
+}
+
+func (hs *httpHealthServer) listenAddr() string {
+	return net.JoinHostPort(hs.bindAddress, strconv.Itoa(hs.port))
+}
+
+func (hs *httpHealthServer) handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, req *http.Request) {})
+	mux.HandleFunc("/last-poll", hs.lastPollFn)
+	return mux
 }
 
 func (hs *httpHealthServer) Start() {
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, req *http.Request) {})
-	http.HandleFunc("/last-poll", hs.lastPollFn)
-	glog.Fatal(http.ListenAndServe(":8080", nil))
+	if hs.port <= 0 {
+		return
+	}
+	addr := hs.listenAddr()
+	glog.V(0).Infof("Starting healthz HTTP server on %s", addr)
+	glog.Fatal(http.ListenAndServe(addr, hs.handler()))
 }
 
 func (hs *httpHealthServer) lastPollFn(w http.ResponseWriter, req *http.Request) {
