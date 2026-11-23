@@ -18,14 +18,17 @@ package k8sclient
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
 )
 
 func TestGetTarget(t *testing.T) {
@@ -368,5 +371,37 @@ func TestGetTrimmedNodeClients(t *testing.T) {
 	}
 	if node.Status.Phase != "" {
 		t.Errorf("node.Status is not trimmed. Got %+v", node.Status)
+	}
+}
+
+func TestRecordReplicaUpdateEvent(t *testing.T) {
+	recorder := record.NewFakeRecorder(1)
+	client := &k8sClient{
+		scaleTargets: &scaleTargets{namespace: "test-namespace"},
+		clusterStatus: &ClusterStatus{
+			SchedulableNodes: 2,
+			SchedulableCores: 4,
+		},
+		recorder: recorder,
+	}
+	target := target{kind: "deployment", name: "test-target"}
+	uid := types.UID("target-uid")
+
+	ref := targetObjectReference(target, "test-namespace", uid)
+	if ref.UID != uid {
+		t.Fatalf("target reference UID = %q, want %q", ref.UID, uid)
+	}
+
+	client.recordReplicaUpdateEvent(target, uid, 3, 5)
+	event := <-recorder.Events
+	for _, want := range []string{
+		"Normal AutoScaling",
+		"updated replicas from 3 to 5",
+		"SchedulableNodes: 2",
+		"SchedulableCores: 4",
+	} {
+		if !strings.Contains(event, want) {
+			t.Errorf("event %q does not contain %q", event, want)
+		}
 	}
 }
