@@ -35,6 +35,10 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "create"]
+  # Required only when running with --leader-elect=true:
+  # - apiGroups: ["coordination.k8s.io"]
+  #   resources: ["leases"]
+  #   verbs: ["get", "create", "update"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

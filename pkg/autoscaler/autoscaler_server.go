@@ -17,13 +17,20 @@ limitations under the License.
 package autoscaler
 
 import (
+	"context"
+	"crypto/rand"
+	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/utils/clock"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/cmd/cluster-proportional-autoscaler/options"
@@ -37,6 +44,8 @@ import (
 // AutoScaler determines the number of replicas to run
 type AutoScaler struct {
 	k8sClient              k8sclient.K8sClient
+	k8sClientInitFn        func() (k8sclient.K8sClient, error)
+	leaderElection         *leaderelection.LeaderElectionConfig
 	controller             controller.Controller
 	inUpdateModeOff        bool
 	lastUseDefaultsWarnVer string
@@ -45,6 +54,7 @@ type AutoScaler struct {
 	pollPeriod             time.Duration
 	clock                  clock.WithTicker
 	stopCh                 chan struct{}
+	stopOnce               sync.Once
 	readyCh                chan<- struct{} // For testing.
 	healthServer           HealthServer
 	lastPollCycleHealth    *healthInfo
@@ -64,9 +74,52 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	if err != nil {
 		return nil, err
 	}
-	newK8sClient, err := k8sclient.NewK8sClient(clientset, c.Namespace, c.Target, c.NodeLabels)
-	if err != nil {
-		return nil, err
+	initK8sClient := func() (k8sclient.K8sClient, error) {
+		return k8sclient.NewK8sClient(clientset, c.Namespace, c.Target, c.NodeLabels)
+	}
+	var (
+		newK8sClient   k8sclient.K8sClient
+		leaderElection *leaderelection.LeaderElectionConfig
+	)
+	if c.LeaderElect {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return nil, err
+		}
+		var randBytes [4]byte
+		if _, err := rand.Read(randBytes[:]); err != nil {
+			return nil, err
+		}
+		leaseName := c.LeaderElectResourceName
+		if leaseName == "" {
+			leaseName = c.ConfigMap
+		}
+		leaseNamespace := c.LeaderElectResourceNamespace
+		if leaseNamespace == "" {
+			leaseNamespace = c.Namespace
+		}
+		leaderElection = &leaderelection.LeaderElectionConfig{
+			Name: leaseName,
+			Lock: &resourcelock.LeaseLock{
+				LeaseMeta: metav1.ObjectMeta{
+					Name:      leaseName,
+					Namespace: leaseNamespace,
+				},
+				Client: clientset.CoordinationV1(),
+				LockConfig: resourcelock.ResourceLockConfig{
+					Identity: fmt.Sprintf("%s_%x", hostname, randBytes),
+				},
+			},
+			ReleaseOnCancel: true,
+			LeaseDuration:   c.LeaderElectLeaseDuration,
+			RenewDeadline:   c.LeaderElectRenewDeadline,
+			RetryPeriod:     c.LeaderElectRetryPeriod,
+		}
+	} else {
+		newK8sClient, err = initK8sClient()
+		if err != nil {
+			return nil, err
+		}
 	}
 	healthInfo := newHealthInfo()
 	healthServer := httpHealthServer{
@@ -76,6 +129,8 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	}
 	return &AutoScaler{
 		k8sClient:           newK8sClient,
+		k8sClientInitFn:     initK8sClient,
+		leaderElection:      leaderElection,
 		configMapName:       c.ConfigMap,
 		defaultParams:       c.DefaultParams,
 		pollPeriod:          time.Second * time.Duration(c.PollPeriodSeconds),
@@ -113,18 +168,144 @@ func buildKubeconfig(kubeConfigPath string) (*rest.Config, error) {
 // number of replicas, compares them to the actual replicas, and
 // updates the target resource with the expected replicas if necessary.
 func (s *AutoScaler) Run() {
-	ticker := s.clock.NewTicker(s.pollPeriod)
-	s.readyCh <- struct{}{} // For testing.
-
 	go s.healthServer.Start()
+	if s.leaderElection == nil {
+		s.runPollLoop(s.stopCh, nil)
+		return
+	}
+	s.runWithLeaderElection()
+}
+
+// Stop signals the autoscaler loop and leader election to shut down gracefully.
+func (s *AutoScaler) Stop() {
+	s.stopOnce.Do(func() {
+		if s.stopCh != nil {
+			close(s.stopCh)
+		}
+	})
+}
+
+func isClosed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *AutoScaler) runWithLeaderElection() {
+	// stopCtx is canceled only when s.Stop() triggers graceful shutdown, whereas
+	// electCtx is also canceled on post-acquisition k8sClient init failure so
+	// OnStoppedLeading can distinguish clean shutdown from fatal errors.
+	stopCtx, cancelStop := context.WithCancel(context.Background())
+	defer cancelStop()
+	electCtx, cancelElect := context.WithCancel(stopCtx)
+	defer cancelElect()
+
+	var (
+		leaderMu sync.Mutex // guards OnStartedLeading lifecycle
+		pollMu   sync.Mutex // held while runPollLoop is actively reconciling
+	)
+	go func() {
+		select {
+		case <-s.stopCh:
+			// Wait for any active poll cycle to finish before canceling electCtx so
+			// ReleaseOnCancel releases the Lease only after guarded work completes.
+			pollMu.Lock()
+			pollMu.Unlock()
+			cancelStop()
+		case <-stopCtx.Done():
+		}
+	}()
+
+	cfg := *s.leaderElection
+	cfg.Callbacks = leaderelection.LeaderCallbacks{
+		OnStartedLeading: func(leaderCtx context.Context) {
+			leaderMu.Lock()
+			defer leaderMu.Unlock()
+			if leaderCtx.Err() != nil || isClosed(s.stopCh) {
+				return
+			}
+			glog.V(0).Infof("Acquired leader lease %s as %s; starting autoscaling loop", cfg.Lock.Describe(), cfg.Lock.Identity())
+			if s.k8sClient == nil {
+				if s.k8sClientInitFn == nil {
+					glog.Errorf("Failed to initialize k8sClient after acquiring leader lease: initializer is nil")
+					cancelElect()
+					return
+				}
+				client, err := s.k8sClientInitFn()
+				if err != nil {
+					glog.Errorf("Failed to initialize k8sClient after acquiring leader lease: %v", err)
+					cancelElect()
+					return
+				}
+				if client == nil {
+					glog.Errorf("Failed to initialize k8sClient after acquiring leader lease: returned nil client")
+					cancelElect()
+					return
+				}
+				s.k8sClient = client
+			}
+			pollMu.Lock()
+			defer pollMu.Unlock()
+			if leaderCtx.Err() != nil || isClosed(s.stopCh) {
+				return
+			}
+			s.runPollLoop(leaderCtx.Done(), s.stopCh)
+		},
+		OnStoppedLeading: func() {
+			if stopCtx.Err() != nil {
+				glog.V(0).Infof("Leader election stopped cleanly for %s", cfg.Lock.Identity())
+				return
+			}
+			glog.Errorf("Stopped leading on lease %s; exiting", cfg.Lock.Describe())
+			s.exitFn()
+		},
+		OnNewLeader: func(identity string) {
+			if identity == "" || identity == cfg.Lock.Identity() {
+				return
+			}
+			glog.V(0).Infof("New leader elected: %s", identity)
+		},
+	}
+
+	elector, err := leaderelection.NewLeaderElector(cfg)
+	if err != nil {
+		glog.Errorf("Failed to create leader elector: %v", err)
+		s.exitFn()
+		return
+	}
+	elector.Run(electCtx)
+
+	// Wait for any active OnStartedLeading goroutine to finish exiting before returning.
+	leaderMu.Lock()
+	leaderMu.Unlock()
+}
+
+func (s *AutoScaler) runPollLoop(stopCh, secondaryStopCh <-chan struct{}) {
+	ticker := s.clock.NewTicker(s.pollPeriod)
+	defer ticker.Stop()
+	if s.readyCh != nil {
+		s.readyCh <- struct{}{} // For testing.
+	}
+
 	// Don't wait for ticker and execute pollAPIServer() for the first time.
 	s.tryPollAPIServer()
 
 	for {
 		select {
 		case <-ticker.C():
+			if isClosed(stopCh) || isClosed(secondaryStopCh) {
+				return
+			}
 			s.tryPollAPIServer()
-		case <-s.stopCh:
+		case <-stopCh:
+			return
+		case <-secondaryStopCh:
 			return
 		}
 	}

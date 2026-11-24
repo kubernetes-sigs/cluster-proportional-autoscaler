@@ -30,6 +30,12 @@ Usage of cluster-proportional-autoscaler:
       --max-sync-failures=[0]: Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.
       --healthz-bind-address=: IP address for the /healthz and /last-poll HTTP endpoints (empty binds all interfaces).
       --healthz-port=8080: Port for the /healthz and /last-poll HTTP endpoints (set to 0 to disable).
+      --leader-elect[=false]: Enable Lease-based leader election (coordination.k8s.io/v1) so standby replicas remain idle without starting informers or polling.
+      --leader-elect-resource-name="": Name of the Lease object used for leader election (defaults to --configmap).
+      --leader-elect-resource-namespace="": Namespace of the Lease object used for leader election (defaults to --namespace).
+      --leader-elect-lease-duration=15s: Duration that non-leader candidates will wait before forcing acquisition of the leader lease.
+      --leader-elect-renew-deadline=10s: Duration that the acting leader will retry refreshing leadership before giving up.
+      --leader-elect-retry-period=2s: Duration the LeaderElector clients should wait between tries of actions.
 ```
 
 ## Running out-of-cluster
@@ -222,3 +228,15 @@ The ConfigMap provides the operator with the ability to tune the replica scaling
 ## Using NodeLabels
 
 Nodelabels is an optional param to count only nodes and its cpus where the nodelabels exits. This is useful when nodeselector is used on the target pods controller so its needed to take account only the nodes tagged with the nodeselector labels to calculate the total replicas to scale. When the param is ignored then the cluster proportional autoscaler counts all schedulable nodes and its cpus.
+
+## Leader Election
+
+For active-standby high availability, run multiple replicas with `--leader-elect=true`. Only the replica holding the `coordination.k8s.io/v1` `Lease` (defaulting to `--configmap` in `--namespace`) initializes the Kubernetes client and runs the scaling loop, while standby replicas keep `/healthz` active and wait passively to acquire the lease.
+
+When `--leader-elect=true` is enabled, grant the ServiceAccount `get`, `create`, and `update` permissions on `leases` in the lease namespace:
+
+```yaml
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "create", "update"]
+```

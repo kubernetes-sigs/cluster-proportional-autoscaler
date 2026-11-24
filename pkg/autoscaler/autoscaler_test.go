@@ -21,12 +21,19 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	testingclock "k8s.io/utils/clock/testing"
 
 	"github.com/kubernetes-sigs/cluster-proportional-autoscaler/pkg/autoscaler/controller/laddercontroller"
@@ -409,4 +416,359 @@ func TestPollAPIServer_ConfigMapUpdateModeAndUseDefaults(t *testing.T) {
 	if mockK8s.NumOfReplicas != 30 {
 		t.Fatalf("replicas changed on invalid updateMode: got %d, want 30", mockK8s.NumOfReplicas)
 	}
+}
+
+type spyHealthServer struct {
+	once      sync.Once
+	startedCh chan struct{}
+}
+
+func (s *spyHealthServer) Start() {
+	s.once.Do(func() { close(s.startedCh) })
+}
+
+func startLeaderAutoScaler(
+	t *testing.T,
+	clientset *fake.Clientset,
+	id, leaseName string,
+	initFn func() (k8sclient.K8sClient, error),
+	exitCh chan struct{},
+	health HealthServer,
+) (readyCh chan struct{}, stopFn func()) {
+	t.Helper()
+	stopCh := make(chan struct{})
+	readyCh = make(chan struct{}, 1)
+	if health == nil {
+		health = mockHealthServer{}
+	}
+	var exitOnce sync.Once
+	s := &AutoScaler{
+		k8sClientInitFn: initFn,
+		leaderElection: &leaderelection.LeaderElectionConfig{
+			Lock: &resourcelock.LeaseLock{
+				LeaseMeta:  metav1.ObjectMeta{Name: leaseName, Namespace: "kube-system"},
+				Client:     clientset.CoordinationV1(),
+				LockConfig: resourcelock.ResourceLockConfig{Identity: id},
+			},
+			ReleaseOnCancel: true,
+			LeaseDuration:   2 * time.Second,
+			RenewDeadline:   600 * time.Millisecond,
+			RetryPeriod:     50 * time.Millisecond,
+		},
+		clock:               testingclock.NewFakeClock(time.Now()),
+		pollPeriod:          10 * time.Second,
+		configMapName:       leaseName,
+		stopCh:              stopCh,
+		readyCh:             readyCh,
+		lastPollCycleHealth: newHealthInfo(),
+		healthServer:        health,
+		exitFn: func() {
+			if exitCh == nil {
+				t.Errorf("unexpected exitFn call for replica %s", id)
+				return
+			}
+			exitOnce.Do(func() { close(exitCh) })
+		},
+	}
+
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		s.Run()
+	}()
+
+	stopFn = func() {
+		s.Stop()
+		select {
+		case <-doneCh:
+		case <-time.After(5 * time.Second):
+			t.Errorf("timed out waiting for replica %s to stop", id)
+		}
+	}
+	t.Cleanup(stopFn)
+	return readyCh, stopFn
+}
+
+func newFakeMockK8sClient() *k8sclient.MockK8sClient {
+	return &k8sclient.MockK8sClient{
+		NumOfNodes: 10,
+		NumOfCores: 40,
+		ConfigMap: &v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{ResourceVersion: "1"},
+			Data:       map[string]string{linearcontroller.ControllerType: `{"coresPerReplica": 10, "nodesPerReplica": 10, "min": 1}`},
+		},
+	}
+}
+
+func TestRun_LeaderElectionStandbyIdleAndFailover(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	var standbyStarted atomic.Bool
+	var standbyPolls atomic.Int32
+	standbyPolledCh := make(chan struct{})
+	var polledOnce sync.Once
+	clientset.PrependReactor("get", "leases", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if standbyStarted.Load() && standbyPolls.Add(1) >= 2 {
+			polledOnce.Do(func() { close(standbyPolledCh) })
+		}
+		return false, nil, nil
+	})
+
+	var init1, init2 atomic.Int32
+	ready1, stop1 := startLeaderAutoScaler(t, clientset, "replica-1", "test-lease", func() (k8sclient.K8sClient, error) {
+		init1.Add(1)
+		return newFakeMockK8sClient(), nil
+	}, nil, nil)
+
+	select {
+	case <-ready1:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for replica-1 to acquire leadership")
+	}
+	if got := init1.Load(); got != 1 {
+		t.Fatalf("replica-1 init count = %d, want 1", got)
+	}
+
+	standbyHealth := &spyHealthServer{startedCh: make(chan struct{})}
+	standbyStarted.Store(true)
+	ready2, _ := startLeaderAutoScaler(t, clientset, "replica-2", "test-lease", func() (k8sclient.K8sClient, error) {
+		init2.Add(1)
+		return newFakeMockK8sClient(), nil
+	}, nil, standbyHealth)
+
+	select {
+	case <-standbyHealth.startedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for standby health server to start")
+	}
+	select {
+	case <-standbyPolledCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for standby replica to poll held lease")
+	}
+	if got := init2.Load(); got != 0 {
+		t.Fatalf("standby replica initialized k8sClient %d times while not leader", got)
+	}
+	select {
+	case <-ready2:
+		t.Fatal("standby replica started poll loop while replica-1 held lease")
+	default:
+	}
+
+	stop1()
+	select {
+	case <-ready2:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for replica-2 to take over after replica-1 stopped")
+	}
+	if got := init2.Load(); got != 1 {
+		t.Fatalf("replica-2 init count after failover = %d, want 1", got)
+	}
+}
+
+func TestRun_LeaderElectionExitPaths(t *testing.T) {
+	t.Run("init failure releases lease and exits", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset()
+		exitCh := make(chan struct{})
+		_, stop := startLeaderAutoScaler(t, clientset, "replica-fail", "init-fail-lease", func() (k8sclient.K8sClient, error) {
+			return nil, errors.New("apiserver unreachable")
+		}, exitCh, nil)
+
+		select {
+		case <-exitCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for exitFn after k8sClient init failure")
+		}
+		stop()
+
+		lease, err := clientset.CoordinationV1().Leases("kube-system").Get(context.Background(), "init-fail-lease", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("getting lease: %v", err)
+		}
+		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
+			t.Errorf("expected lease holder to be released after init failure, got %q", *lease.Spec.HolderIdentity)
+		}
+	})
+
+	t.Run("lease renewal loss exits", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset()
+		var failRenewals atomic.Bool
+		clientset.PrependReactor("update", "leases", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			if failRenewals.Load() {
+				return true, nil, errors.New("lease update rejected")
+			}
+			return false, nil, nil
+		})
+
+		exitCh := make(chan struct{})
+		readyCh, _ := startLeaderAutoScaler(t, clientset, "replica-loss", "loss-lease", func() (k8sclient.K8sClient, error) {
+			return newFakeMockK8sClient(), nil
+		}, exitCh, nil)
+
+		select {
+		case <-readyCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for replica-loss to acquire lease")
+		}
+		failRenewals.Store(true)
+		select {
+		case <-exitCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for exitFn after lease renewal loss")
+		}
+	})
+
+	t.Run("Stop releases lease cleanly without calling exitFn", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset()
+		stopCh := make(chan struct{})
+		readyCh := make(chan struct{}, 1)
+		var exitCalled atomic.Bool
+		s := &AutoScaler{
+			k8sClientInitFn: func() (k8sclient.K8sClient, error) {
+				return newFakeMockK8sClient(), nil
+			},
+			leaderElection: &leaderelection.LeaderElectionConfig{
+				Lock: &resourcelock.LeaseLock{
+					LeaseMeta:  metav1.ObjectMeta{Name: "graceful-stop-lease", Namespace: "kube-system"},
+					Client:     clientset.CoordinationV1(),
+					LockConfig: resourcelock.ResourceLockConfig{Identity: "replica-stop"},
+				},
+				ReleaseOnCancel: true,
+				LeaseDuration:   15 * time.Second,
+				RenewDeadline:   10 * time.Second,
+				RetryPeriod:     50 * time.Millisecond,
+			},
+			clock:               testingclock.NewFakeClock(time.Now()),
+			pollPeriod:          10 * time.Second,
+			configMapName:       "graceful-stop-lease",
+			stopCh:              stopCh,
+			readyCh:             readyCh,
+			lastPollCycleHealth: newHealthInfo(),
+			healthServer:        mockHealthServer{},
+			exitFn:              func() { exitCalled.Store(true) },
+		}
+
+		doneCh := make(chan struct{})
+		go func() {
+			defer close(doneCh)
+			s.Run()
+		}()
+
+		select {
+		case <-readyCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for replica-stop to acquire lease")
+		}
+
+		// Stop must be idempotent and release the lease without invoking exitFn.
+		s.Stop()
+		s.Stop()
+
+		select {
+		case <-doneCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for Run() to return after Stop()")
+		}
+		if exitCalled.Load() {
+			t.Fatal("exitFn should not be called on graceful Stop()")
+		}
+		lease, err := clientset.CoordinationV1().Leases("kube-system").Get(context.Background(), "graceful-stop-lease", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("getting lease: %v", err)
+		}
+		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
+			t.Errorf("expected lease holder to be released after Stop(), got %q", *lease.Spec.HolderIdentity)
+		}
+	})
+
+	t.Run("Stop waits for in-flight poll before releasing lease", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset()
+		inPollCh := make(chan struct{})
+		releasePollCh := make(chan struct{})
+		var pollOnce sync.Once
+		client := &blockingPollK8sClient{
+			MockK8sClient: newFakeMockK8sClient(),
+			onPoll: func() {
+				pollOnce.Do(func() { close(inPollCh) })
+				<-releasePollCh
+			},
+		}
+
+		stopCh := make(chan struct{})
+		var exitCalled atomic.Bool
+		s := &AutoScaler{
+			k8sClientInitFn: func() (k8sclient.K8sClient, error) {
+				return client, nil
+			},
+			leaderElection: &leaderelection.LeaderElectionConfig{
+				Name: "inflight-stop-lease",
+				Lock: &resourcelock.LeaseLock{
+					LeaseMeta:  metav1.ObjectMeta{Name: "inflight-stop-lease", Namespace: "kube-system"},
+					Client:     clientset.CoordinationV1(),
+					LockConfig: resourcelock.ResourceLockConfig{Identity: "replica-inflight"},
+				},
+				ReleaseOnCancel: true,
+				LeaseDuration:   15 * time.Second,
+				RenewDeadline:   10 * time.Second,
+				RetryPeriod:     50 * time.Millisecond,
+			},
+			clock:               testingclock.NewFakeClock(time.Now()),
+			pollPeriod:          10 * time.Second,
+			configMapName:       "inflight-stop-lease",
+			stopCh:              stopCh,
+			lastPollCycleHealth: newHealthInfo(),
+			healthServer:        mockHealthServer{},
+			exitFn:              func() { exitCalled.Store(true) },
+		}
+
+		doneCh := make(chan struct{})
+		go func() {
+			defer close(doneCh)
+			s.Run()
+		}()
+
+		select {
+		case <-inPollCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for in-flight poll to start")
+		}
+
+		s.Stop()
+		// Give the shutdown goroutine multiple retry periods to verify the Lease
+		// stays held while the in-flight poll has not returned.
+		time.Sleep(150 * time.Millisecond)
+		lease, err := clientset.CoordinationV1().Leases("kube-system").Get(context.Background(), "inflight-stop-lease", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("getting lease during in-flight poll: %v", err)
+		}
+		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != "replica-inflight" {
+			t.Fatalf("lease released prematurely while poll was in flight: holder = %v", lease.Spec.HolderIdentity)
+		}
+
+		close(releasePollCh)
+		select {
+		case <-doneCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for Run() to return after poll completed")
+		}
+		if exitCalled.Load() {
+			t.Fatal("exitFn should not be called on graceful Stop()")
+		}
+		lease, err = clientset.CoordinationV1().Leases("kube-system").Get(context.Background(), "inflight-stop-lease", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("getting lease after Stop(): %v", err)
+		}
+		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
+			t.Errorf("expected lease holder to be released after poll completed, got %q", *lease.Spec.HolderIdentity)
+		}
+	})
+}
+
+type blockingPollK8sClient struct {
+	*k8sclient.MockK8sClient
+	onPoll func()
+}
+
+func (b *blockingPollK8sClient) UpdateReplicas(expReplicas int32) error {
+	b.onPoll()
+	return b.MockK8sClient.UpdateReplicas(expReplicas)
 }
