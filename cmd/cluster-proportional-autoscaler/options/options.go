@@ -29,6 +29,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// Matches k8s.io/client-go/tools/leaderelection.JitterFactor without pulling
+// client-go into the options package.
+const leaderElectJitterFactor = 1.2
+
 // AutoScalerConfig configures and runs an autoscaler server
 type AutoScalerConfig struct {
 	Target                       string
@@ -110,10 +114,10 @@ func (c *AutoScalerConfig) ValidateFlags() error {
 			errorsFound = true
 			glog.Errorf("--leader-elect-lease-duration (%v) must be greater than --leader-elect-renew-deadline (%v)",
 				c.LeaderElectLeaseDuration, c.LeaderElectRenewDeadline)
-		} else if c.LeaderElectRenewDeadline <= c.LeaderElectRetryPeriod {
+		} else if float64(c.LeaderElectRenewDeadline) <= leaderElectJitterFactor*float64(c.LeaderElectRetryPeriod) {
 			errorsFound = true
-			glog.Errorf("--leader-elect-renew-deadline (%v) must be greater than --leader-elect-retry-period (%v)",
-				c.LeaderElectRenewDeadline, c.LeaderElectRetryPeriod)
+			glog.Errorf("--leader-elect-renew-deadline (%v) must be greater than %.1f * --leader-elect-retry-period (%v)",
+				c.LeaderElectRenewDeadline, leaderElectJitterFactor, c.LeaderElectRetryPeriod)
 		}
 	}
 

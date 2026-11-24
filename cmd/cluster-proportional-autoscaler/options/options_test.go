@@ -165,6 +165,11 @@ func TestLeaderElectFlags(t *testing.T) {
 	}{
 		{name: "lease-duration equal to renew-deadline", mutate: func(c *AutoScalerConfig) { c.LeaderElectLeaseDuration = c.LeaderElectRenewDeadline }},
 		{name: "renew-deadline equal to retry-period", mutate: func(c *AutoScalerConfig) { c.LeaderElectRenewDeadline = c.LeaderElectRetryPeriod }},
+		{name: "renew-deadline within jitter factor of retry-period", mutate: func(c *AutoScalerConfig) {
+			c.LeaderElectLeaseDuration = 10 * time.Second
+			c.LeaderElectRenewDeadline = 5 * time.Second
+			c.LeaderElectRetryPeriod = 4500 * time.Millisecond
+		}},
 		{name: "sub-second lease-duration", mutate: func(c *AutoScalerConfig) {
 			c.LeaderElectLeaseDuration = 500 * time.Millisecond
 			c.LeaderElectRenewDeadline = 300 * time.Millisecond

@@ -477,9 +477,8 @@ func startLeaderAutoScaler(
 		s.Run()
 	}()
 
-	var stopOnce sync.Once
 	stopFn = func() {
-		stopOnce.Do(func() { close(stopCh) })
+		s.Stop()
 		select {
 		case <-doneCh:
 		case <-time.After(5 * time.Second):
@@ -680,4 +679,96 @@ func TestRun_LeaderElectionExitPaths(t *testing.T) {
 			t.Errorf("expected lease holder to be released after Stop(), got %q", *lease.Spec.HolderIdentity)
 		}
 	})
+
+	t.Run("Stop waits for in-flight poll before releasing lease", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset()
+		inPollCh := make(chan struct{})
+		releasePollCh := make(chan struct{})
+		var pollOnce sync.Once
+		client := &blockingPollK8sClient{
+			MockK8sClient: newFakeMockK8sClient(),
+			onPoll: func() {
+				pollOnce.Do(func() { close(inPollCh) })
+				<-releasePollCh
+			},
+		}
+
+		stopCh := make(chan struct{})
+		var exitCalled atomic.Bool
+		s := &AutoScaler{
+			k8sClientInitFn: func() (k8sclient.K8sClient, error) {
+				return client, nil
+			},
+			leaderElection: &leaderelection.LeaderElectionConfig{
+				Name: "inflight-stop-lease",
+				Lock: &resourcelock.LeaseLock{
+					LeaseMeta:  metav1.ObjectMeta{Name: "inflight-stop-lease", Namespace: "kube-system"},
+					Client:     clientset.CoordinationV1(),
+					LockConfig: resourcelock.ResourceLockConfig{Identity: "replica-inflight"},
+				},
+				ReleaseOnCancel: true,
+				LeaseDuration:   15 * time.Second,
+				RenewDeadline:   10 * time.Second,
+				RetryPeriod:     50 * time.Millisecond,
+			},
+			clock:               testingclock.NewFakeClock(time.Now()),
+			pollPeriod:          10 * time.Second,
+			configMapName:       "inflight-stop-lease",
+			stopCh:              stopCh,
+			lastPollCycleHealth: newHealthInfo(),
+			healthServer:        mockHealthServer{},
+			exitFn:              func() { exitCalled.Store(true) },
+		}
+
+		doneCh := make(chan struct{})
+		go func() {
+			defer close(doneCh)
+			s.Run()
+		}()
+
+		select {
+		case <-inPollCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for in-flight poll to start")
+		}
+
+		s.Stop()
+		// Give the shutdown goroutine multiple retry periods to verify the Lease
+		// stays held while the in-flight poll has not returned.
+		time.Sleep(150 * time.Millisecond)
+		lease, err := clientset.CoordinationV1().Leases("kube-system").Get(context.Background(), "inflight-stop-lease", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("getting lease during in-flight poll: %v", err)
+		}
+		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != "replica-inflight" {
+			t.Fatalf("lease released prematurely while poll was in flight: holder = %v", lease.Spec.HolderIdentity)
+		}
+
+		close(releasePollCh)
+		select {
+		case <-doneCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for Run() to return after poll completed")
+		}
+		if exitCalled.Load() {
+			t.Fatal("exitFn should not be called on graceful Stop()")
+		}
+		lease, err = clientset.CoordinationV1().Leases("kube-system").Get(context.Background(), "inflight-stop-lease", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("getting lease after Stop(): %v", err)
+		}
+		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
+			t.Errorf("expected lease holder to be released after poll completed, got %q", *lease.Spec.HolderIdentity)
+		}
+	})
+}
+
+type blockingPollK8sClient struct {
+	*k8sclient.MockK8sClient
+	onPoll func()
+}
+
+func (b *blockingPollK8sClient) UpdateReplicas(expReplicas int32) error {
+	b.onPoll()
+	return b.MockK8sClient.UpdateReplicas(expReplicas)
 }

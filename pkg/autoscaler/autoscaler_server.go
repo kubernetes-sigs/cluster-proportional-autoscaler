@@ -99,6 +99,7 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 			leaseNamespace = c.Namespace
 		}
 		leaderElection = &leaderelection.LeaderElectionConfig{
+			Name: leaseName,
 			Lock: &resourcelock.LeaseLock{
 				LeaseMeta: metav1.ObjectMeta{
 					Name:      leaseName,
@@ -169,7 +170,7 @@ func buildKubeconfig(kubeConfigPath string) (*rest.Config, error) {
 func (s *AutoScaler) Run() {
 	go s.healthServer.Start()
 	if s.leaderElection == nil {
-		s.runPollLoop(s.stopCh)
+		s.runPollLoop(s.stopCh, nil)
 		return
 	}
 	s.runWithLeaderElection()
@@ -184,27 +185,49 @@ func (s *AutoScaler) Stop() {
 	})
 }
 
+func isClosed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *AutoScaler) runWithLeaderElection() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// stopCtx is canceled only when s.Stop() triggers graceful shutdown, whereas
+	// electCtx is also canceled on post-acquisition k8sClient init failure so
+	// OnStoppedLeading can distinguish clean shutdown from fatal errors.
+	stopCtx, cancelStop := context.WithCancel(context.Background())
+	defer cancelStop()
+	electCtx, cancelElect := context.WithCancel(stopCtx)
+	defer cancelElect()
+
+	var (
+		leaderMu sync.Mutex // guards OnStartedLeading lifecycle
+		pollMu   sync.Mutex // held while runPollLoop is actively reconciling
+	)
 	go func() {
 		select {
 		case <-s.stopCh:
-			cancel()
-		case <-ctx.Done():
+			// Wait for any active poll cycle to finish before canceling electCtx so
+			// ReleaseOnCancel releases the Lease only after guarded work completes.
+			pollMu.Lock()
+			pollMu.Unlock()
+			cancelStop()
+		case <-stopCtx.Done():
 		}
 	}()
 
-	electCtx, cancelElect := context.WithCancel(ctx)
-	defer cancelElect()
-
-	var leaderMu sync.Mutex
 	cfg := *s.leaderElection
 	cfg.Callbacks = leaderelection.LeaderCallbacks{
 		OnStartedLeading: func(leaderCtx context.Context) {
 			leaderMu.Lock()
 			defer leaderMu.Unlock()
-			if leaderCtx.Err() != nil {
+			if leaderCtx.Err() != nil || isClosed(s.stopCh) {
 				return
 			}
 			glog.V(0).Infof("Acquired leader lease %s as %s; starting autoscaling loop", cfg.Lock.Describe(), cfg.Lock.Identity())
@@ -215,25 +238,38 @@ func (s *AutoScaler) runWithLeaderElection() {
 					return
 				}
 				client, err := s.k8sClientInitFn()
-				if err != nil || client == nil {
+				if err != nil {
 					glog.Errorf("Failed to initialize k8sClient after acquiring leader lease: %v", err)
+					cancelElect()
+					return
+				}
+				if client == nil {
+					glog.Errorf("Failed to initialize k8sClient after acquiring leader lease: returned nil client")
 					cancelElect()
 					return
 				}
 				s.k8sClient = client
 			}
-			if leaderCtx.Err() != nil {
+			pollMu.Lock()
+			defer pollMu.Unlock()
+			if leaderCtx.Err() != nil || isClosed(s.stopCh) {
 				return
 			}
-			s.runPollLoop(leaderCtx.Done())
+			s.runPollLoop(leaderCtx.Done(), s.stopCh)
 		},
 		OnStoppedLeading: func() {
-			if ctx.Err() != nil {
+			if stopCtx.Err() != nil {
 				glog.V(0).Infof("Leader election stopped cleanly for %s", cfg.Lock.Identity())
 				return
 			}
 			glog.Errorf("Stopped leading on lease %s; exiting", cfg.Lock.Describe())
 			s.exitFn()
+		},
+		OnNewLeader: func(identity string) {
+			if identity == "" || identity == cfg.Lock.Identity() {
+				return
+			}
+			glog.V(0).Infof("New leader elected: %s", identity)
 		},
 	}
 
@@ -250,7 +286,7 @@ func (s *AutoScaler) runWithLeaderElection() {
 	leaderMu.Unlock()
 }
 
-func (s *AutoScaler) runPollLoop(stopCh <-chan struct{}) {
+func (s *AutoScaler) runPollLoop(stopCh, secondaryStopCh <-chan struct{}) {
 	ticker := s.clock.NewTicker(s.pollPeriod)
 	defer ticker.Stop()
 	if s.readyCh != nil {
@@ -263,8 +299,13 @@ func (s *AutoScaler) runPollLoop(stopCh <-chan struct{}) {
 	for {
 		select {
 		case <-ticker.C():
+			if isClosed(stopCh) || isClosed(secondaryStopCh) {
+				return
+			}
 			s.tryPollAPIServer()
 		case <-stopCh:
+			return
+		case <-secondaryStopCh:
 			return
 		}
 	}
