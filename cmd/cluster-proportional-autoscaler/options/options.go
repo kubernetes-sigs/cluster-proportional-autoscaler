@@ -37,6 +37,7 @@ type AutoScalerConfig struct {
 	PollPeriodSeconds  int
 	PrintVer           bool
 	NodeLabels         string
+	ScaleOptimizedMode bool
 	MaxSyncFailures    int
 	KubeConfig         string
 	HealthzBindAddress string
@@ -143,6 +144,7 @@ func (c *AutoScalerConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&c.PrintVer, "version", c.PrintVer, "Print the version and exit.")
 	fs.Var(&c.DefaultParams, "default-params", "Default parameters(JSON format) for auto-scaling. Will create/re-create a ConfigMap with this default params if ConfigMap is not present.")
 	fs.StringVar(&c.NodeLabels, "nodelabels", c.NodeLabels, "NodeLabels for filtering search of nodes and its cpus by LabelSelectors. Input format is a comma separated list of keyN=valueN LabelSelectors. Usage example: --nodelabels=label1=value1,label2=value2.")
+	fs.BoolVar(&c.ScaleOptimizedMode, "scale-optimized-mode", c.ScaleOptimizedMode, "Stream node LIST (resourceVersion=0) and WATCH protobuf responses keeping only {unschedulable, ready, milliCPU} per node instead of a Node informer cache, reducing memory usage on large clusters.")
 	fs.IntVar(&c.MaxSyncFailures, "max-sync-failures", c.MaxSyncFailures, "Number of consecutive polling failures before exiting. Default value of 0 will allow for unlimited retries.")
 	fs.StringVar(&c.KubeConfig, "kubeconfig", c.KubeConfig, "Path to the kubeconfig file.")
 	fs.StringVar(&c.HealthzBindAddress, "healthz-bind-address", c.HealthzBindAddress, "IP address for the /healthz and /last-poll HTTP endpoints (empty binds all interfaces).")

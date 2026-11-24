@@ -21,6 +21,7 @@ Usage of cluster-proportional-autoscaler:
       --logtostderr[=false]: log to standard error instead of files
       --namespace="": Namespace for all operations, fallback to the namespace of this autoscaler(through MY_POD_NAMESPACE env) if not specified.
       --poll-period-seconds=10: The time, in seconds, to check cluster status and perform autoscale.
+      --scale-optimized-mode[=false]: Stream node LIST (resourceVersion=0) and WATCH protobuf responses keeping only {unschedulable, ready, milliCPU} per node instead of a Node informer cache, reducing memory usage on large clusters.
       --stderrthreshold=2: logs at or above this threshold go to stderr
       --target="": Targets to scale. In format: 'deployment/*,replicationcontroller/*,replicaset/*' (not case sensitive, comma delimiter supported).
       --v=0: log level for V logs

@@ -64,7 +64,12 @@ func NewAutoScaler(c *options.AutoScalerConfig) (*AutoScaler, error) {
 	if err != nil {
 		return nil, err
 	}
-	newK8sClient, err := k8sclient.NewK8sClient(clientset, c.Namespace, c.Target, c.NodeLabels)
+	var newK8sClient k8sclient.K8sClient
+	if c.ScaleOptimizedMode {
+		newK8sClient, err = k8sclient.NewK8sClientWithCompactNodeSource(clientset, c.Namespace, c.Target, c.NodeLabels)
+	} else {
+		newK8sClient, err = k8sclient.NewK8sClient(clientset, c.Namespace, c.Target, c.NodeLabels)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +130,10 @@ func (s *AutoScaler) Run() {
 		case <-ticker.C():
 			s.tryPollAPIServer()
 		case <-s.stopCh:
+			ticker.Stop()
+			if stopper, ok := s.k8sClient.(interface{ Stop() }); ok {
+				stopper.Stop()
+			}
 			return
 		}
 	}

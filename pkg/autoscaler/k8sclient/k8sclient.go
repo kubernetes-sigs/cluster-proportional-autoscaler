@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	v1 "k8s.io/api/core/v1"
@@ -59,6 +60,20 @@ type k8sClient struct {
 	clusterStatus *ClusterStatus
 	nodeLister    corelisters.NodeLister
 	stopCh        chan struct{}
+	stopOnce      sync.Once
+	compact       *compactNodeSource
+}
+
+// Stop terminates background node watch/informer goroutines owned by this client.
+func (k *k8sClient) Stop() {
+	k.stopOnce.Do(func() {
+		if k.compact != nil {
+			k.compact.stop()
+		}
+		if k.stopCh != nil {
+			close(k.stopCh)
+		}
+	})
 }
 
 func getTrimmedNodeClients(clientset kubernetes.Interface, labelOptions informers.SharedInformerOption) (informers.SharedInformerFactory, corelisters.NodeLister, error) {
@@ -112,6 +127,29 @@ func NewK8sClient(clientset kubernetes.Interface, namespace, target string, node
 		nodeLister:   nodeLister,
 		stopCh:       stopCh,
 	}, nil
+}
+
+// NewK8sClientWithCompactNodeSource creates a k8sClient whose node status comes from the compact
+// streamed protobuf LIST + WATCH node source instead of a Node informer cache.
+func NewK8sClientWithCompactNodeSource(clientset kubernetes.Interface, namespace, target string, nodelabels string) (K8sClient, error) {
+	if clientset == nil || clientset.CoreV1().RESTClient() == nil {
+		return nil, fmt.Errorf("clientset has nil CoreV1 RESTClient")
+	}
+	scaleTargets, err := getScaleTargets(target, namespace)
+	if err != nil {
+		return nil, err
+	}
+	k := &k8sClient{
+		scaleTargets: scaleTargets,
+		clientset:    clientset,
+		compact:      newCompactNodeSource(clientset.CoreV1().RESTClient(), nodelabels),
+	}
+	glog.V(0).Infof("Using compact node source (streamed protobuf LIST resourceVersion=0 + WATCH; per-node {unschedulable, ready, milliCPU}); Node informer disabled")
+	if err := k.compact.ensureSynced(); err != nil {
+		// Not fatal: GetClusterStatus retries the LIST on the next poll.
+		glog.Errorf("Initial compact node LIST failed (will retry on next poll): %v", err)
+	}
+	return k, nil
 }
 
 func getScaleTargets(targets, namespace string) (*scaleTargets, error) {
@@ -206,6 +244,15 @@ func isNodeReady(node *v1.Node) bool {
 }
 
 func (k *k8sClient) GetClusterStatus() (clusterStatus *ClusterStatus, err error) {
+	if k.compact != nil {
+		clusterStatus, err = k.compact.status()
+		if err != nil {
+			return nil, err
+		}
+		k.clusterStatus = clusterStatus
+		return clusterStatus, nil
+	}
+
 	nodes, err := k.nodeLister.List(labels.NewSelector())
 	if err != nil {
 		return nil, err
